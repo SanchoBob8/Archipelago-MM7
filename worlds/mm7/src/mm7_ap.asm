@@ -9,32 +9,33 @@ hirom
 ; $7E1FA0 appears to be cleared during state transitions.
 ; ============================================
 
-!AP_BOSS_FLAGS      = $7E1FA1
-!AP_BOSS_FLAGS_2    = $7E1FA2
-!AP_DEBUG_FLAGS     = $7E1FA3
-!AP_ITEM_ID_LO      = $7E1FA4
-!AP_ITEM_ID_HI      = $7E1FA5
-!AP_EXECUTE_FLAG    = $7E1FA6
-!AP_RECV_INDEX_LO   = $7E1FA7
-!AP_RECV_INDEX_HI   = $7E1FA8
-!AP_CONNECTION      = $7E1FA9
-!AP_RUNTIME_START   = $7E1FA1
-!MM7_PROTO_FLAGS    = $7E0B78
+!AP_BOSS_FLAGS              = $7E1FA1
+!AP_BOSS_FLAGS_2            = $7E1FA2
+!AP_DEBUG_FLAGS             = $7E1FA3
+!AP_ITEM_ID_LO              = $7E1FA4
+!AP_ITEM_ID_HI              = $7E1FA5
+!AP_EXECUTE_FLAG            = $7E1FA6
+!AP_RECV_INDEX_LO           = $7E1FA7
+!AP_RECV_INDEX_HI           = $7E1FA8
+!AP_CONNECTION              = $7E1FA9
+!AP_RUNTIME_START           = $7E1FA1
+!MM7_PROTO_FLAGS            = $7E0B78
 
-!AP_PROTO_CHECKS    = $7E1FA2 ; already AP_BOSS_FLAGS_2
-!AP_PROTO_ITEMS     = $7E1FAA ; AP-owned randomized Proto clues
-!AP_TEMP            = $7E1FAB
-!AP_GOAL_FLAGS      = $7E1FAC
-!AP_PICKUP_FLAGS    = $7E1FB0 ; legacy alias for Rush flags
-!AP_RUSH_FLAGS      = $7E1FB0
-!AP_ITEM_FLAGS      = $7E1FB1
-!AP_MEGA_FLAGS      = $7E1FB2 ; AP checked flags for $0BB1 mega items
-!AP_MISC_FLAGS      = $7E1FB3
-!AP_WILY_FLAGS      = $7E1FB4
-!AP_WILY_ACCESS     = $7E1FB5
-!AP_SELECTED_WILY_STAGE = $7E1FB6
-!AP_DRAW_WILY_NUMBER = $7E1FB7
-!AP_EXIT_UNIT_USED = $7E1FB8
+!AP_PROTO_CHECKS            = $7E1FA2 ; already AP_BOSS_FLAGS_2
+!AP_PROTO_ITEMS             = $7E1FAA ; AP-owned randomized Proto clues
+!AP_TEMP                    = $7E1FAB
+!AP_GOAL_FLAGS              = $7E1FAC
+!AP_PICKUP_FLAGS            = $7E1FB0 ; legacy alias for Rush flags
+!AP_RUSH_FLAGS              = $7E1FB0
+!AP_ITEM_FLAGS              = $7E1FB1
+!AP_MEGA_FLAGS              = $7E1FB2 ; AP checked flags for $0BB1 mega items
+!AP_MISC_FLAGS              = $7E1FB3
+!AP_WILY_FLAGS              = $7E1FB4
+!AP_WILY_ACCESS             = $7E1FB5
+!AP_SELECTED_WILY_STAGE     = $7E1FB6
+!AP_DRAW_WILY_NUMBER        = $7E1FB7
+!AP_EXIT_UNIT_USED          = $7E1FB8
+!AP_EXIT_UNIT_PAID_PENDING  = $7E1FB9
 
 org $C0356D
     NOP
@@ -194,7 +195,7 @@ org $C00DBC
 
 org $C047D9
     JSL AP_CheckExitUnitAccess
-    BCC $C04807
+    db $90, $28 ; BCC $C04807
     NOP
 
 ; Wily unlock gate.
@@ -1838,9 +1839,25 @@ AP_ExitUnitMedalCheck:
     BEQ .no_medal
 
 .has_medal:
+    ; Mark that this stage exit came from Exit Unit, not boss defeat.
     LDA #$01
     STA.l !AP_EXIT_UNIT_USED
 
+    ; If this was a paid Exit Unit use, subtract the cost now.
+    LDA.l !AP_EXIT_UNIT_PAID_PENDING
+    BEQ .finish_success
+
+    LDA #$00
+    STA.l !AP_EXIT_UNIT_PAID_PENDING
+
+    REP #$20
+    LDA.l $7E0BA6
+    SEC
+    SBC.l AP_ConfigPaidExitUnitCostLo
+    STA.l $7E0BA6
+    SEP #$20
+
+.finish_success:
     PLX
     PLP
     JML $C047F0
@@ -2521,12 +2538,10 @@ AP_CheckExitUnitAccess:
     CMP.l AP_ConfigPaidExitUnitCostLo
     BCC .deny_16
 
-    ; Enough bolts. Subtract the cost.
-    SEC
-    SBC.l AP_ConfigPaidExitUnitCostLo
-    STA.l $7E0BA6
-
+    ; Enough bolts. Mark pending paid use, but do not subtract yet.
     SEP #$20
+    LDA #$01
+    STA.l !AP_EXIT_UNIT_PAID_PENDING
     BRA .allow
 
 .deny_16:
