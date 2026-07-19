@@ -34,6 +34,7 @@ hirom
 !AP_WILY_ACCESS     = $7E1FB5
 !AP_SELECTED_WILY_STAGE = $7E1FB6
 !AP_DRAW_WILY_NUMBER = $7E1FB7
+!AP_EXIT_UNIT_USED = $7E1FB8
 
 org $C0356D
     NOP
@@ -189,6 +190,11 @@ org $C3722E
 
 org $C00DBC
     JML AP_StageExitAPOnlyBossGate
+    NOP
+
+org $C047D9
+    JSL AP_CheckExitUnitAccess
+    BCC $C04807
     NOP
 
 ; Wily unlock gate.
@@ -1333,6 +1339,18 @@ AP_StageExitAPOnlyBossGate:
     SEP #$30
     PHX
 
+    ; If this stage exit came from Exit Unit, do not send the boss reward check.
+    LDA.l !AP_EXIT_UNIT_USED
+    BEQ .boss_defeated
+
+    LDA #$00
+    STA.l !AP_EXIT_UNIT_USED
+
+    PLX
+    PLP
+    JML $C00DDC
+
+.boss_defeated:
     ; X is stage_id * 2 here.
     ; Record the boss as defeated for AP.
     TXA
@@ -1805,6 +1823,10 @@ AP_ExitUnitMedalCheck:
     SEP #$30
     PHX
 
+    ; If option is enabled, allow Exit Unit even if the stage is not cleared.
+    LDA.l AP_ConfigExitUnitInUnclearedStages
+    BNE .has_medal
+
     ; X is the vanilla offset into $0B83 table.
     ; Convert $02,$04,...,$10 into boss index 1..8.
     TXA
@@ -1816,6 +1838,9 @@ AP_ExitUnitMedalCheck:
     BEQ .no_medal
 
 .has_medal:
+    LDA #$01
+    STA.l !AP_EXIT_UNIT_USED
+
     PLX
     PLP
     JML $C047F0
@@ -2476,6 +2501,48 @@ AP_WilyStageNumberTileTable:
     db $27
     db $28
 
+AP_CheckExitUnitAccess:
+    PHP
+    SEP #$20
+
+    ; If the real Exit Unit item is owned, allow for free.
+    LDA.l $7E0BA4
+    BIT #$20
+    BNE .allow
+
+    ; If paid Exit Unit is disabled, deny.
+    LDA.l AP_ConfigPaidExitUnit
+    BEQ .deny
+
+    ; Compare current bolts with paid Exit Unit cost.
+    REP #$20
+
+    LDA.l $7E0BA6
+    CMP.l AP_ConfigPaidExitUnitCostLo
+    BCC .deny_16
+
+    ; Enough bolts. Subtract the cost.
+    SEC
+    SBC.l AP_ConfigPaidExitUnitCostLo
+    STA.l $7E0BA6
+
+    SEP #$20
+    BRA .allow
+
+.deny_16:
+    SEP #$20
+    BRA .deny
+
+.allow:
+    PLP
+    SEC
+    RTL
+
+.deny:
+    PLP
+    CLC
+    RTL
+
 assert pc() <= $D8FEA0
 
 org $D8FEA0
@@ -2490,6 +2557,14 @@ AP_ConfigStartingSTanks:
 AP_ConfigStartingBoltsLo:
     db $01
 AP_ConfigStartingBoltsHi:
+    db $00
+AP_ConfigPaidExitUnit:
+    db $00
+AP_ConfigPaidExitUnitCostLo:
+    db $64
+AP_ConfigPaidExitUnitCostHi:
+    db $00
+AP_ConfigExitUnitInUnclearedStages:
     db $00
 
 ; ============================================
