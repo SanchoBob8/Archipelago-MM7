@@ -14,6 +14,8 @@ from worlds.Files import APProcedurePatch, APTokenMixin, APTokenTypes
 if TYPE_CHECKING:
     from . import MegaMan7World
 
+MM7_ROM_CONFIG_OFFSET = 0x18FEA0
+MM7_ROM_CONFIG_SIZE = 6
 
 MM7_KNOWN_MD5: set[str] = set()
 MM7_ROM_AUTH_TOKEN_OFFSET = 0x18FEC0
@@ -35,6 +37,21 @@ def get_rom_auth_token(world: "MegaMan7World") -> bytes:
     assert len(token) == MM7_ROM_AUTH_TOKEN_SIZE
     return token
 
+def get_rom_config(world: "MegaMan7World") -> bytes:
+    starting_lives = int(world.options.starting_lives.value)
+    starting_bolts = int(world.options.starting_bolts.value)
+    starting_e_tanks = int(world.options.starting_e_tanks.value)
+    starting_w_tanks = int(world.options.starting_w_tanks.value)
+    starting_s_tanks = int(world.options.starting_s_tanks.value)
+
+    return bytes([
+        starting_lives,
+        starting_e_tanks,
+        starting_w_tanks,
+        starting_s_tanks,
+        starting_bolts & 0xFF,
+        (starting_bolts >> 8) & 0xFF,
+    ])
 
 class MM7Settings(settings.Group):
     class RomFile(settings.SNESRomPath):
@@ -64,14 +81,21 @@ def patch_rom(world: "MegaMan7World", patch: MM7ProcedurePatch) -> None:
     basepatch = pkgutil.get_data(__name__, "data/mm7_basepatch.bsdiff4")
     if basepatch is None:
         raise FileNotFoundError(
-            "Missing worlds/mm7/data/mm7_basepatch.bsdiff4. "
+            "Missing worlds/mm7/data/mm7_basepatch.bsdiff4.\n"
             "Build it from clean Mega Man 7 ROM -> ASM-patched ROM, then place it in data/."
         )
 
     patch.write_file("mm7_basepatch.bsdiff4", basepatch)
 
+    rom_config = get_rom_config(world)
+    if len(rom_config) != MM7_ROM_CONFIG_SIZE:
+        raise ValueError(f"MM7 ROM config must be {MM7_ROM_CONFIG_SIZE} bytes.")
+
+    patch.write_token(APTokenTypes.WRITE, MM7_ROM_CONFIG_OFFSET, rom_config)
+
     auth_token = get_rom_auth_token(world)
     patch.write_token(APTokenTypes.WRITE, MM7_ROM_AUTH_TOKEN_OFFSET, auth_token)
+
     patch.write_file("mm7_tokens.bin", patch.get_token_binary())
 
 

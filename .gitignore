@@ -203,3 +203,4 @@ Thumbs.db
 ap-env
 mm7.apworld
 worlds/mm7/notes.md
+worlds/mm7/src/patch_mm7base.py

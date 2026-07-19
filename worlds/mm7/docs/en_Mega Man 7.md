@@ -76,6 +76,8 @@ Some upgrades and pickups are also converted into Archipelago checks. When one o
 
 The stage select screen allows selecting available Wily stages using the Wily stage box once Wily Access Codes have been received. You can cycle through the unlocked stages with L/R.
 
+Mega Man 7 supports options for starting lives, bolts, E-Tanks, W-Tanks, and S-Tanks.
+
 ## Current limitations
 
 This is an early MVP release. It should be fully playable, but options are currently limited.
@@ -84,5 +86,4 @@ The following features are not currently implemented:
 
 - EnergyLink
 - On-screen item receive messages
-- Starting consumables options
 - And much more

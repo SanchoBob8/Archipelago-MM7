@@ -69,19 +69,16 @@ org $C03DF6
 
 org $C00C22
     LDA #$01
-    STA $0B79 ; ???
+    STA $0B79 ; Intro Stage completed (0 when done)
     STA $0B7A ; Robot Museum Flag
     STA $0B7B ; New stages introduction flag
     STZ $0B7C ; Wily Stage
-    JSL AP_SetStartingTanks
-    JSL AP_SetStartingItems
+    JSL AP_SetStartingResources
     LDA #$82
     STA $0B77
-    JSL AP_SetStartingBolts
     JSL AP_ClearRuntime
-    NOP
-    NOP
-    NOP
+    fillbyte $EA
+    fill 11
 
 ; ============================================
 ; Remove Rush Coil as a starting item
@@ -858,25 +855,33 @@ org $C00DF8
 
 org $D8EF15
 
-AP_SetStartingTanks:
-    LDA #$01
-    STA $0BA0
-    LDA #$00
-    STA $0BA1
-    LDA #$00
-    STA $0BA2
-    RTL
+AP_SetStartingResources:
+    PHP
+    SEP #$20
 
-AP_SetStartingItems:
-    LDA #$00
-    STA $0BA4
-    RTL
+    LDA.l AP_ConfigStartingLives
+    STA.l $7E0B81
 
-AP_SetStartingBolts:
-    LDA #$01
-    STA $0BA6
+    LDA.l AP_ConfigStartingETanks
+    STA.l $7E0BA0
+
+    LDA.l AP_ConfigStartingWTanks
+    STA.l $7E0BA1
+
+    LDA.l AP_ConfigStartingSTanks
+    STA.l $7E0BA2
+
+    LDA.l AP_ConfigStartingBoltsLo
+    STA.l $7E0BA6
+
+    LDA.l AP_ConfigStartingBoltsHi
+    STA.l $7E0BA7
+
+    ; Starting unique items are still cleared.
     LDA #$00
-    STA $0BA7
+    STA.l $7E0BA4
+
+    PLP
     RTL
 
 AP_ClearRuntime:
@@ -2470,6 +2475,22 @@ AP_WilyStageNumberTileTable:
     db $26
     db $27
     db $28
+
+assert pc() <= $D8FEA0
+
+org $D8FEA0
+AP_ConfigStartingLives:
+    db $03
+AP_ConfigStartingETanks:
+    db $01
+AP_ConfigStartingWTanks:
+    db $00
+AP_ConfigStartingSTanks:
+    db $00
+AP_ConfigStartingBoltsLo:
+    db $01
+AP_ConfigStartingBoltsHi:
+    db $00
 
 ; ============================================
 ; AP ROM auth token
