@@ -60,6 +60,30 @@ class StartingSTanks(Range):
     range_end = 1
     default = 0
 
+class ExitUnitInUnclearedStages(Toggle):
+    """
+    Allows the Exit Unit to be used before the current stage has been cleared.
+    """
+    display_name = "Exit Unit in Uncleared Stages"
+    default = False
+
+class PaidExitUnit(Toggle):
+    """
+    Allows the Exit Unit to be used before receiving the Exit Unit item by spending bolts.
+    """
+    display_name = "Paid Exit Unit"
+    default = False
+
+
+class PaidExitUnitCost(Range):
+    """
+    Number of bolts required to use the Exit Unit before receiving the Exit Unit item.
+    """
+    display_name = "Paid Exit Unit Cost"
+    range_start = 0
+    range_end = 999
+    default = 100
+
 
 @dataclass
 class MegaMan7Options(PerGameCommonOptions):
@@ -69,3 +93,6 @@ class MegaMan7Options(PerGameCommonOptions):
     starting_e_tanks: StartingETanks
     starting_w_tanks: StartingWTanks
     starting_s_tanks: StartingSTanks
+    exit_unit_in_uncleared_stages: ExitUnitInUnclearedStages
+    paid_exit_unit: PaidExitUnit
+    paid_exit_unit_cost: PaidExitUnitCost
