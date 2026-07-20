@@ -2467,13 +2467,13 @@ AP_CheckWily4Requirement:
     PHP
     SEP #$30
 
-    ; Requirement type 0 = Wily stages cleared.
     LDA.l AP_ConfigWily4RequirementType
     CMP #$00
     BEQ .check_wily_stages
 
-    ; Other requirement types are not implemented yet.
-    ; For now, keep them unavailable defensively.
+    CMP #$01
+    BEQ .check_robot_masters
+
     BRA .deny
 
 .check_wily_stages:
@@ -2486,6 +2486,35 @@ AP_CheckWily4Requirement:
     STA.l !AP_TEMP
 
     LDX #$00
+
+.check_robot_masters:
+    LDA.l AP_ConfigWily4RobotMasters
+    BEQ .allow
+
+    ; Count defeated Robot Masters from !AP_BOSS_FLAGS.
+    LDA.l !AP_BOSS_FLAGS
+    STA.l !AP_TEMP
+
+    LDX #$00
+
+.count_robot_masters_loop:
+    LDA.l !AP_TEMP
+    BEQ .compare_robot_masters_count
+
+    LSR
+    STA.l !AP_TEMP
+
+    BCC .count_robot_masters_loop
+
+    INX
+    BRA .count_robot_masters_loop
+
+.compare_robot_masters_count:
+    TXA
+    CMP.l AP_ConfigWily4RobotMasters
+    BCS .allow
+
+    BRA .deny
 
 .count_loop:
     LDA.l !AP_TEMP
@@ -2634,6 +2663,8 @@ AP_ConfigWily4RequirementType:
     db $00
 AP_ConfigWily4WilyStages:
     db $03
+AP_ConfigWily4RobotMasters:
+    db $08
 
 ; ============================================
 ; AP ROM auth token

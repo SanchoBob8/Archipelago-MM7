@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from . import MegaMan7World
 
 MM7_ROM_CONFIG_OFFSET = 0x18FEA0
-MM7_ROM_CONFIG_SIZE = 12
+MM7_ROM_CONFIG_SIZE = 13
 
 MM7_KNOWN_MD5: set[str] = set()
 MM7_ROM_AUTH_TOKEN_OFFSET = 0x18FEC0
@@ -50,6 +50,7 @@ def get_rom_config(world: "MegaMan7World") -> bytes:
 
     wily_4_requirement_type = int(world.options.wily_4_requirement_type.value)
     wily_4_wily_stages = int(world.options.wily_4_wily_stages.value)
+    wily_4_robot_masters = int(world.options.wily_4_robot_masters.value)
 
     return bytes([
         starting_lives,
@@ -64,6 +65,7 @@ def get_rom_config(world: "MegaMan7World") -> bytes:
         exit_unit_in_uncleared_stages,
         wily_4_requirement_type,
         wily_4_wily_stages,
+        wily_4_robot_masters,
     ])
 
 class MM7Settings(settings.Group):

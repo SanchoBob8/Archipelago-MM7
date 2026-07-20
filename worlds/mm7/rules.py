@@ -76,7 +76,6 @@ def has_wily_3_access(state: CollectionState, player: int) -> bool:
 
 def has_wily_4_access(state: CollectionState, world: "MegaMan7World") -> bool:
     player = world.player
-
     requirement_type = world.options.wily_4_requirement_type.value
 
     if requirement_type == world.options.wily_4_requirement_type.option_wily_stages:
@@ -89,6 +88,22 @@ def has_wily_4_access(state: CollectionState, world: "MegaMan7World") -> bool:
         ])
 
         return cleared_wily_stages >= required
+
+    if requirement_type == world.options.wily_4_requirement_type.option_robot_masters:
+        required = world.options.wily_4_robot_masters.value
+
+        defeated_robot_masters = sum([
+            state.has(names.freeze_man_defeated, player),
+            state.has(names.cloud_man_defeated, player),
+            state.has(names.junk_man_defeated, player),
+            state.has(names.burst_man_defeated, player),
+            state.has(names.slash_man_defeated, player),
+            state.has(names.spring_man_defeated, player),
+            state.has(names.shade_man_defeated, player),
+            state.has(names.turbo_man_defeated, player),
+        ])
+
+        return defeated_robot_masters >= required
 
     return False
 
