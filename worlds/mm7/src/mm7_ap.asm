@@ -684,6 +684,7 @@ AP_MainLoopHook:
     JSR $315A
     INC $00D1
     JSL AP_CheckItemReceive
+    JSL AP_UpdateVanillaWilyAvailability
     RTL
 
 org $C07EC0
@@ -2608,6 +2609,25 @@ AP_CheckWily4Requirement:
 .weapons_deny:
     PLP
     CLC
+    RTL
+
+AP_UpdateVanillaWilyAvailability:
+    PHP
+    SEP #$20
+
+    ; If vanilla Wily box is already available, nothing to do.
+    LDA.l $7E0B7C
+    BNE .done
+
+    ; If Wily 4 requirement is met, enable the vanilla Wily box.
+    JSL AP_CheckWily4Requirement
+    BCC .done
+
+    LDA #$01
+    STA.l $7E0B7C
+
+.done:
+    PLP
     RTL
 
 AP_DrawSelectedWilyStageNumber:
