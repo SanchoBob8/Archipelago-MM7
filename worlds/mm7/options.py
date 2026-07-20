@@ -93,7 +93,6 @@ class Wily4RequirementType(Choice):
     option_wily_stages = 0
     option_robot_masters = 1
     option_weapons = 2
-    option_defeat_protoman = 3
 
     default = option_wily_stages
 
