@@ -74,12 +74,54 @@ def has_wily_3_access(state: CollectionState, player: int) -> bool:
     return state.has(names.wily_3_access, player)
 
 
-def has_wily_4_access(state: CollectionState, player: int) -> bool:
-    return (
-        state.has(names.guts_man_g_defeated, player)
-        and state.has(names.gamerizer_defeated, player)
-        and state.has(names.hannya_ned_defeated, player)
-    )
+def has_wily_4_access(state: CollectionState, world: "MegaMan7World") -> bool:
+    player = world.player
+    requirement_type = world.options.wily_4_requirement_type.value
+
+    if requirement_type == world.options.wily_4_requirement_type.option_wily_stages:
+        required = world.options.wily_4_wily_stages.value
+
+        cleared_wily_stages = sum([
+            state.has(names.guts_man_g_defeated, player),
+            state.has(names.gamerizer_defeated, player),
+            state.has(names.hannya_ned_defeated, player),
+        ])
+
+        return cleared_wily_stages >= required
+
+    if requirement_type == world.options.wily_4_requirement_type.option_robot_masters:
+        required = world.options.wily_4_robot_masters.value
+
+        defeated_robot_masters = sum([
+            state.has(names.freeze_man_defeated, player),
+            state.has(names.cloud_man_defeated, player),
+            state.has(names.junk_man_defeated, player),
+            state.has(names.burst_man_defeated, player),
+            state.has(names.slash_man_defeated, player),
+            state.has(names.spring_man_defeated, player),
+            state.has(names.shade_man_defeated, player),
+            state.has(names.turbo_man_defeated, player),
+        ])
+
+        return defeated_robot_masters >= required
+
+    if requirement_type == world.options.wily_4_requirement_type.option_weapons:
+        required = world.options.wily_4_weapons.value
+
+        weapons_received = sum([
+            state.has(names.freeze_cracker, player),
+            state.has(names.danger_wrap, player),
+            state.has(names.thunder_bolt, player),
+            state.has(names.junk_shield, player),
+            state.has(names.slash_claw, player),
+            state.has(names.wild_coil, player),
+            state.has(names.noise_crush, player),
+            state.has(names.scorch_wheel, player),
+        ])
+
+        return weapons_received >= required
+
+    return False
 
 # Super Adapter is not an AP item.
 # In logic, it is derived from all four Rush plates.
@@ -327,7 +369,7 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
     )
 
     multiworld.get_location(names.wily_capsule, player).access_rule = (
-        lambda state: has_wily_4_access(state, player)
+        lambda state: has_wily_4_access(state, world)
     )
 
     multiworld.completion_condition[player] = (

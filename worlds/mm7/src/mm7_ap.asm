@@ -684,6 +684,7 @@ AP_MainLoopHook:
     JSR $315A
     INC $00D1
     JSL AP_CheckItemReceive
+    JSL AP_UpdateVanillaWilyAvailability
     RTL
 
 org $C07EC0
@@ -2270,14 +2271,12 @@ AP_SelectFirstAvailableWilyStage:
     RTS
 
 .check_4:
-    ; Wily 4 available after Wily 1-3 are cleared.
-    LDA.l !AP_WILY_FLAGS
-    AND #$07
-    CMP #$07
-    BNE .none
-
     LDA #$04
     STA.l !AP_SELECTED_WILY_STAGE
+
+    JSR AP_IsSelectedWilyStageAvailable
+    BCC .none
+
     RTS
 
 .none:
@@ -2457,13 +2456,179 @@ AP_IsSelectedWilyStageAvailable:
     RTS
 
 .stage_4:
-    LDA.l !AP_WILY_FLAGS
-    AND #$07
-    CMP #$07
-    BNE .unavailable
+    JSL AP_CheckWily4Requirement
+    BCC .unavailable
 
     SEC
     RTS
+
+AP_CheckWily4Requirement:
+    PHP
+    SEP #$30
+
+    LDA.l AP_ConfigWily4RequirementType
+    CMP #$00
+    BEQ .check_wily_stages
+
+    CMP #$01
+    BEQ .check_robot_masters
+
+    CMP #$02
+    BEQ .goto_weapons
+
+    ; Unknown requirement type: deny.
+    PLP
+    CLC
+    RTL
+
+.goto_weapons:
+    JMP .check_weapons
+
+.check_wily_stages:
+    LDA.l AP_ConfigWily4WilyStages
+    BEQ .allow
+
+    LDA.l !AP_WILY_FLAGS
+    AND #$07
+    STA.l !AP_TEMP
+
+    LDX #$00
+
+.count_wily_loop:
+    LDA.l !AP_TEMP
+    BEQ .compare_wily_count
+
+    LSR
+    STA.l !AP_TEMP
+
+    BCC .count_wily_loop
+
+    INX
+    BRA .count_wily_loop
+
+.compare_wily_count:
+    TXA
+    CMP.l AP_ConfigWily4WilyStages
+    BCS .allow
+
+    BRA .deny
+
+.check_robot_masters:
+    LDA.l AP_ConfigWily4RobotMasters
+    BEQ .allow
+
+    LDA.l !AP_BOSS_FLAGS
+    STA.l !AP_TEMP
+
+    LDX #$00
+
+.count_robot_masters_loop:
+    LDA.l !AP_TEMP
+    BEQ .compare_robot_masters_count
+
+    LSR
+    STA.l !AP_TEMP
+
+    BCC .count_robot_masters_loop
+
+    INX
+    BRA .count_robot_masters_loop
+
+.compare_robot_masters_count:
+    TXA
+    CMP.l AP_ConfigWily4RobotMasters
+    BCS .allow
+
+    BRA .deny
+
+.deny:
+    PLP
+    CLC
+    RTL
+
+.allow:
+    PLP
+    SEC
+    RTL
+
+.check_weapons:
+    LDA.l AP_ConfigWily4Weapons
+    BNE .count_weapons
+
+    ; Required weapons = 0.
+    PLP
+    SEC
+    RTL
+
+.count_weapons:
+    LDX #$00
+
+    LDA.l $7E0B85 ; Freeze Cracker
+    BEQ +
+    INX
++
+    LDA.l $7E0B91 ; Danger Wrap
+    BEQ +
+    INX
++
+    LDA.l $7E0B87 ; Thunder Bolt
+    BEQ +
+    INX
++
+    LDA.l $7E0B89 ; Junk Shield
+    BEQ +
+    INX
++
+    LDA.l $7E0B8D ; Slash Claw
+    BEQ +
+    INX
++
+    LDA.l $7E0B93 ; Wild Coil
+    BEQ +
+    INX
++
+    LDA.l $7E0B8F ; Noise Crush
+    BEQ +
+    INX
++
+    LDA.l $7E0B8B ; Scorch Wheel
+    BEQ +
+    INX
++
+
+.compare_weapons_count:
+    TXA
+    CMP.l AP_ConfigWily4Weapons
+    BCC .weapons_deny
+
+.weapons_allow:
+    PLP
+    SEC
+    RTL
+
+.weapons_deny:
+    PLP
+    CLC
+    RTL
+
+AP_UpdateVanillaWilyAvailability:
+    PHP
+    SEP #$20
+
+    ; If vanilla Wily box is already available, nothing to do.
+    LDA.l $7E0B7C
+    BNE .done
+
+    ; If Wily 4 requirement is met, enable the vanilla Wily box.
+    JSL AP_CheckWily4Requirement
+    BCC .done
+
+    LDA #$01
+    STA.l $7E0B7C
+
+.done:
+    PLP
+    RTL
 
 AP_DrawSelectedWilyStageNumber:
     PHP
@@ -2581,6 +2746,14 @@ AP_ConfigPaidExitUnitCostHi:
     db $00
 AP_ConfigExitUnitInUnclearedStages:
     db $00
+AP_ConfigWily4RequirementType:
+    db $00
+AP_ConfigWily4WilyStages:
+    db $03
+AP_ConfigWily4RobotMasters:
+    db $08
+AP_ConfigWily4Weapons:
+    db $08
 
 ; ============================================
 ; AP ROM auth token

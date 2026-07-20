@@ -84,3 +84,49 @@ class TestAllResourceAndExitUnitOptionsMaximums(MM7TestBase):
         "paid_exit_unit_cost": 999,
         "exit_unit_in_uncleared_stages": True,
     }
+
+class TestWily4RequirementDefault(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "wily_stages",
+        "wily_4_wily_stages": 3,
+    }
+
+
+class TestWily4RequirementWilyStagesMinimum(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "wily_stages",
+        "wily_4_wily_stages": 0,
+    }
+
+
+class TestWily4RequirementWilyStagesMaximum(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "wily_stages",
+        "wily_4_wily_stages": 3,
+    }
+
+class TestWily4RequirementRobotMastersMinimum(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "robot_masters",
+        "wily_4_robot_masters": 0,
+    }
+
+
+class TestWily4RequirementRobotMastersMaximum(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "robot_masters",
+        "wily_4_robot_masters": 8,
+    }
+
+class TestWily4RequirementWeaponsMinimum(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "weapons",
+        "wily_4_weapons": 0,
+    }
+
+
+class TestWily4RequirementWeaponsMaximum(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "weapons",
+        "wily_4_weapons": 8,
+    }
