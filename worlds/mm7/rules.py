@@ -105,6 +105,22 @@ def has_wily_4_access(state: CollectionState, world: "MegaMan7World") -> bool:
 
         return defeated_robot_masters >= required
 
+    if requirement_type == world.options.wily_4_requirement_type.option_weapons:
+        required = world.options.wily_4_weapons.value
+
+        weapons_received = sum([
+            state.has(names.freeze_cracker, player),
+            state.has(names.danger_wrap, player),
+            state.has(names.thunder_bolt, player),
+            state.has(names.junk_shield, player),
+            state.has(names.slash_claw, player),
+            state.has(names.wild_coil, player),
+            state.has(names.noise_crush, player),
+            state.has(names.scorch_wheel, player),
+        ])
+
+        return weapons_received >= required
+
     return False
 
 # Super Adapter is not an AP item.

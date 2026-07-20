@@ -117,3 +117,16 @@ class TestWily4RequirementRobotMastersMaximum(MM7TestBase):
         "wily_4_requirement_type": "robot_masters",
         "wily_4_robot_masters": 8,
     }
+
+class TestWily4RequirementWeaponsMinimum(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "weapons",
+        "wily_4_weapons": 0,
+    }
+
+
+class TestWily4RequirementWeaponsMaximum(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "weapons",
+        "wily_4_weapons": 8,
+    }

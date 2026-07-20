@@ -2270,14 +2270,12 @@ AP_SelectFirstAvailableWilyStage:
     RTS
 
 .check_4:
-    ; Wily 4 available after Wily 1-3 are cleared.
-    LDA.l !AP_WILY_FLAGS
-    AND #$07
-    CMP #$07
-    BNE .none
-
     LDA #$04
     STA.l !AP_SELECTED_WILY_STAGE
+
+    JSR AP_IsSelectedWilyStageAvailable
+    BCC .none
+
     RTS
 
 .none:
@@ -2474,24 +2472,50 @@ AP_CheckWily4Requirement:
     CMP #$01
     BEQ .check_robot_masters
 
-    BRA .deny
+    CMP #$02
+    BEQ .goto_weapons
+
+    ; Unknown requirement type: deny.
+    PLP
+    CLC
+    RTL
+
+.goto_weapons:
+    JMP .check_weapons
 
 .check_wily_stages:
     LDA.l AP_ConfigWily4WilyStages
     BEQ .allow
 
-    ; Count cleared Wily stages 1-3 from !AP_WILY_FLAGS bits 0-2.
     LDA.l !AP_WILY_FLAGS
     AND #$07
     STA.l !AP_TEMP
 
     LDX #$00
 
+.count_wily_loop:
+    LDA.l !AP_TEMP
+    BEQ .compare_wily_count
+
+    LSR
+    STA.l !AP_TEMP
+
+    BCC .count_wily_loop
+
+    INX
+    BRA .count_wily_loop
+
+.compare_wily_count:
+    TXA
+    CMP.l AP_ConfigWily4WilyStages
+    BCS .allow
+
+    BRA .deny
+
 .check_robot_masters:
     LDA.l AP_ConfigWily4RobotMasters
     BEQ .allow
 
-    ; Count defeated Robot Masters from !AP_BOSS_FLAGS.
     LDA.l !AP_BOSS_FLAGS
     STA.l !AP_TEMP
 
@@ -2516,23 +2540,6 @@ AP_CheckWily4Requirement:
 
     BRA .deny
 
-.count_loop:
-    LDA.l !AP_TEMP
-    BEQ .compare_count
-
-    LSR
-    STA.l !AP_TEMP
-
-    BCC .count_loop
-
-    INX
-    BRA .count_loop
-
-.compare_count:
-    TXA
-    CMP.l AP_ConfigWily4WilyStages
-    BCS .allow
-
 .deny:
     PLP
     CLC
@@ -2541,6 +2548,66 @@ AP_CheckWily4Requirement:
 .allow:
     PLP
     SEC
+    RTL
+
+.check_weapons:
+    LDA.l AP_ConfigWily4Weapons
+    BNE .count_weapons
+
+    ; Required weapons = 0.
+    PLP
+    SEC
+    RTL
+
+.count_weapons:
+    LDX #$00
+
+    LDA.l $7E0B85 ; Freeze Cracker
+    BEQ +
+    INX
++
+    LDA.l $7E0B91 ; Danger Wrap
+    BEQ +
+    INX
++
+    LDA.l $7E0B87 ; Thunder Bolt
+    BEQ +
+    INX
++
+    LDA.l $7E0B89 ; Junk Shield
+    BEQ +
+    INX
++
+    LDA.l $7E0B8D ; Slash Claw
+    BEQ +
+    INX
++
+    LDA.l $7E0B93 ; Wild Coil
+    BEQ +
+    INX
++
+    LDA.l $7E0B8F ; Noise Crush
+    BEQ +
+    INX
++
+    LDA.l $7E0B8B ; Scorch Wheel
+    BEQ +
+    INX
++
+
+.compare_weapons_count:
+    TXA
+    CMP.l AP_ConfigWily4Weapons
+    BCC .weapons_deny
+
+.weapons_allow:
+    PLP
+    SEC
+    RTL
+
+.weapons_deny:
+    PLP
+    CLC
     RTL
 
 AP_DrawSelectedWilyStageNumber:
@@ -2664,6 +2731,8 @@ AP_ConfigWily4RequirementType:
 AP_ConfigWily4WilyStages:
     db $03
 AP_ConfigWily4RobotMasters:
+    db $08
+AP_ConfigWily4Weapons:
     db $08
 
 ; ============================================
