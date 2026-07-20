@@ -74,12 +74,23 @@ def has_wily_3_access(state: CollectionState, player: int) -> bool:
     return state.has(names.wily_3_access, player)
 
 
-def has_wily_4_access(state: CollectionState, player: int) -> bool:
-    return (
-        state.has(names.guts_man_g_defeated, player)
-        and state.has(names.gamerizer_defeated, player)
-        and state.has(names.hannya_ned_defeated, player)
-    )
+def has_wily_4_access(state: CollectionState, world: "MegaMan7World") -> bool:
+    player = world.player
+
+    requirement_type = world.options.wily_4_requirement_type.value
+
+    if requirement_type == world.options.wily_4_requirement_type.option_wily_stages:
+        required = world.options.wily_4_wily_stages.value
+
+        cleared_wily_stages = sum([
+            state.has(names.guts_man_g_defeated, player),
+            state.has(names.gamerizer_defeated, player),
+            state.has(names.hannya_ned_defeated, player),
+        ])
+
+        return cleared_wily_stages >= required
+
+    return False
 
 # Super Adapter is not an AP item.
 # In logic, it is derived from all four Rush plates.
@@ -327,7 +338,7 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
     )
 
     multiworld.get_location(names.wily_capsule, player).access_rule = (
-        lambda state: has_wily_4_access(state, player)
+        lambda state: has_wily_4_access(state, world)
     )
 
     multiworld.completion_condition[player] = (

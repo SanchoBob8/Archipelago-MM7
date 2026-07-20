@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from Options import Range, Toggle, PerGameCommonOptions
+from Options import Choice, Range, Toggle, PerGameCommonOptions
 
 
 class LogicBossWeakness(Toggle):
@@ -84,6 +84,49 @@ class PaidExitUnitCost(Range):
     range_end = 999
     default = 100
 
+class Wily4RequirementType(Choice):
+    """
+    Determines what is required before Wily 4 becomes available.
+    """
+    display_name = "Wily 4 Requirement Type"
+
+    option_wily_stages = 0
+    option_robot_masters = 1
+    option_weapons = 2
+    option_defeat_protoman = 3
+
+    default = option_wily_stages
+
+
+class Wily4WilyStages(Range):
+    """
+    With Wily Stages requirement: set the number of Wily stages required to access Wily 4.
+    """
+    display_name = "Wily Stages Required for Wily 4"
+    range_start = 0
+    range_end = 3
+    default = 3
+
+
+class Wily4RobotMasters(Range):
+    """
+    With Robot Masters requirement: set the number of defeated Robot Masters required to access Wily 4.
+    """
+    display_name = "Robot Masters Required for Wily 4"
+    range_start = 0
+    range_end = 8
+    default = 8
+
+
+class Wily4Weapons(Range):
+    """
+    With Weapons requirement: set the number of Robot Master weapons required to access Wily 4.
+    """
+    display_name = "Weapons Required for Wily 4"
+    range_start = 0
+    range_end = 8
+    default = 8
+
 
 @dataclass
 class MegaMan7Options(PerGameCommonOptions):
@@ -96,3 +139,7 @@ class MegaMan7Options(PerGameCommonOptions):
     exit_unit_in_uncleared_stages: ExitUnitInUnclearedStages
     paid_exit_unit: PaidExitUnit
     paid_exit_unit_cost: PaidExitUnitCost
+    wily_4_requirement_type: Wily4RequirementType
+    wily_4_wily_stages: Wily4WilyStages
+    wily_4_robot_masters: Wily4RobotMasters
+    wily_4_weapons: Wily4Weapons

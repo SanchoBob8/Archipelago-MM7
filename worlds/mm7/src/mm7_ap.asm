@@ -2457,13 +2457,62 @@ AP_IsSelectedWilyStageAvailable:
     RTS
 
 .stage_4:
-    LDA.l !AP_WILY_FLAGS
-    AND #$07
-    CMP #$07
-    BNE .unavailable
+    JSL AP_CheckWily4Requirement
+    BCC .unavailable
 
     SEC
     RTS
+
+AP_CheckWily4Requirement:
+    PHP
+    SEP #$30
+
+    ; Requirement type 0 = Wily stages cleared.
+    LDA.l AP_ConfigWily4RequirementType
+    CMP #$00
+    BEQ .check_wily_stages
+
+    ; Other requirement types are not implemented yet.
+    ; For now, keep them unavailable defensively.
+    BRA .deny
+
+.check_wily_stages:
+    LDA.l AP_ConfigWily4WilyStages
+    BEQ .allow
+
+    ; Count cleared Wily stages 1-3 from !AP_WILY_FLAGS bits 0-2.
+    LDA.l !AP_WILY_FLAGS
+    AND #$07
+    STA.l !AP_TEMP
+
+    LDX #$00
+
+.count_loop:
+    LDA.l !AP_TEMP
+    BEQ .compare_count
+
+    LSR
+    STA.l !AP_TEMP
+
+    BCC .count_loop
+
+    INX
+    BRA .count_loop
+
+.compare_count:
+    TXA
+    CMP.l AP_ConfigWily4WilyStages
+    BCS .allow
+
+.deny:
+    PLP
+    CLC
+    RTL
+
+.allow:
+    PLP
+    SEC
+    RTL
 
 AP_DrawSelectedWilyStageNumber:
     PHP
@@ -2581,6 +2630,10 @@ AP_ConfigPaidExitUnitCostHi:
     db $00
 AP_ConfigExitUnitInUnclearedStages:
     db $00
+AP_ConfigWily4RequirementType:
+    db $00
+AP_ConfigWily4WilyStages:
+    db $03
 
 ; ============================================
 ; AP ROM auth token
