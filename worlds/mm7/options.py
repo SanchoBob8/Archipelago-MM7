@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from Options import Choice, Range, Toggle, PerGameCommonOptions
+from Options import Choice, PerGameCommonOptions, Range, Toggle
 
 
 class LogicBossWeakness(Toggle):
@@ -84,6 +84,14 @@ class PaidExitUnitCost(Range):
     range_end = 999
     default = 100
 
+class PaidExitUnitInLogic(Toggle):
+    """
+    Allows logic to consider Paid Exit Unit as a valid way to leave stages.
+    This can make seeds expect the player to have enough bolts for paid exits.
+    """
+    display_name = "Paid Exit Unit in Logic"
+    default = False
+
 class Wily4RequirementType(Choice):
     """
     Determines what is required before Wily 4 becomes available.
@@ -138,6 +146,7 @@ class MegaMan7Options(PerGameCommonOptions):
     exit_unit_in_uncleared_stages: ExitUnitInUnclearedStages
     paid_exit_unit: PaidExitUnit
     paid_exit_unit_cost: PaidExitUnitCost
+    paid_exit_unit_in_logic: PaidExitUnitInLogic
     wily_4_requirement_type: Wily4RequirementType
     wily_4_wily_stages: Wily4WilyStages
     wily_4_robot_masters: Wily4RobotMasters
