@@ -8,7 +8,7 @@ class LogicBossWeakness(Toggle):
     Every main boss will logically expect you to have its weakness.
     """
     display_name = "Boss Weakness Logic"
-    default = True
+    default = False
 
 
 class StartingLives(Range):
@@ -28,7 +28,7 @@ class StartingBolts(Range):
     display_name = "Starting Bolts"
     range_start = 0
     range_end = 999
-    default = 1
+    default = 0
 
 
 class StartingETanks(Range):
@@ -134,6 +134,12 @@ class Wily4Weapons(Range):
     range_end = 8
     default = 8
 
+class SkipIntroStage(Toggle):
+    """
+    Starts the game after the Intro Stage and automatically get the corresponding check.
+    """
+    display_name = "Skip Intro Stage"
+    default = False
 
 @dataclass
 class MegaMan7Options(PerGameCommonOptions):
@@ -151,3 +157,4 @@ class MegaMan7Options(PerGameCommonOptions):
     wily_4_wily_stages: Wily4WilyStages
     wily_4_robot_masters: Wily4RobotMasters
     wily_4_weapons: Wily4Weapons
+    skip_intro_stage: SkipIntroStage

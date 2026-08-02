@@ -69,18 +69,34 @@ org $C03DF6
 ; New-game setup
 ; ============================================
 
+; ============================================
+; New-game setup
+; ============================================
+
 org $C00C22
+    JSL AP_ClearRuntime
+    JSL AP_InitIntroStageFlag
+
     LDA #$01
-    STA $0B79 ; Intro Stage completed (0 when done)
-    STA $0B7A ; Robot Museum Flag
-    STA $0B7B ; New stages introduction flag
-    STZ $0B7C ; Wily Stage
-    JSL AP_SetStartingResources
+    STA $0B7A
+    STA $0B7B
+
+    STZ $0B7C
+
     LDA #$82
     STA $0B77
-    JSL AP_ClearRuntime
+
+    ; Set resources after all initialization.
+    JSL AP_SetStartingResources
+
+    ; Replace the remaining vanilla initialization, including:
+    ;   STZ $0BA6
+    ;   STZ $0BA7
     fillbyte $EA
-    fill 11
+    fill $0A
+
+assert pc() == $C00C48
+; Vanilla RTS remains at $C00C48.
 
 ; ============================================
 ; Remove Rush Coil as a starting item
@@ -1172,6 +1188,31 @@ AP_CheckItemReceive:
     PLP
     RTL
 
+AP_InitIntroStageFlag:
+    PHP
+    SEP #$20
+
+    LDA.l AP_ConfigSkipIntroStage
+    BEQ .normal
+
+    ; Skip intro: mark stage cleared.
+    STZ $0B79
+
+    ; Also mark Intro Stage Cleared location checked.
+    LDA.l !AP_RUSH_FLAGS
+    ORA #$04
+    STA.l !AP_RUSH_FLAGS
+
+    BRA .done
+
+.normal:
+    LDA #$01
+    STA $0B79
+
+.done:
+    PLP
+    RTL
+
 AP_BitMaskTable:
     db $01, $02, $04, $08, $10, $20, $40, $80
 
@@ -2026,7 +2067,7 @@ AP_IntroStageClearCheck:
     ; Preserve vanilla behavior: mark Intro Stage cleared.
     STZ $0B79
 
-    ; Mark Rush Coil / Intro Stage clear location checked.
+    ; Mark Intro Stage Cleared location checked.
     LDA.l !AP_RUSH_FLAGS
     ORA #$04
     STA.l !AP_RUSH_FLAGS
@@ -2754,6 +2795,8 @@ AP_ConfigWily4RobotMasters:
     db $08
 AP_ConfigWily4Weapons:
     db $08
+AP_ConfigSkipIntroStage:
+    db $00
 
 ; ============================================
 ; AP ROM auth token

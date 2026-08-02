@@ -50,6 +50,16 @@ WEAKNESS_TABLE = {
     names.wily_capsule: [names.wild_coil]
 }
 
+def meets_boss_weakness_logic(
+    state: CollectionState,
+    world: "MegaMan7World",
+    boss: str,
+) -> bool:
+    if not world.options.logic_boss_weakness.value:
+        return True
+
+    return can_defeat_boss(state, world.player, boss)
+
 
 def always_accessible(state: CollectionState) -> bool:
     return True
@@ -254,8 +264,9 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
     # ROM routing is based on AP boss medals.
     # ============================================================
 
-    multiworld.get_location(names.mash_defeated, player).access_rule = lambda state: has_robot_museum_access(
-        state, player
+    multiworld.get_location(names.mash_defeated, player).access_rule = lambda state: (
+        has_robot_museum_access(state, player)
+        and meets_boss_weakness_logic(state, world, names.mash_defeated)
     )
 
     # ============================================================
@@ -387,38 +398,57 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
     # ============================================================
     # Wily stages
     #
-    # Base design:
     # - Wily 1/2/3 are unlocked independently by access-code items.
     # - They can be cleared in any order.
-    # - Wily 4 / Wily Capsule unlocks after Wily 1/2/3 are cleared.
+    # - Wily 4 uses its configured access requirement.
+    # - Boss weaknesses are required when logic_boss_weakness is enabled.
     # ============================================================
 
     multiworld.get_location(names.guts_man_g_defeated, player).access_rule = lambda state: (
-        has_wily_1_access(state, player) and can_traverse_vertical(state, player)
+        has_wily_1_access(state, player)
+        and can_traverse_vertical(state, player)
+        and meets_boss_weakness_logic(state, world, names.guts_man_g_defeated)
     )
 
     multiworld.get_location(names.guts_man_g_defeated_item, player).access_rule = lambda state: (
-        has_wily_1_access(state, player) and can_traverse_vertical(state, player)
+        has_wily_1_access(state, player)
+        and can_traverse_vertical(state, player)
+        and meets_boss_weakness_logic(state, world, names.guts_man_g_defeated)
     )
 
     multiworld.get_location(names.gamerizer_defeated, player).access_rule = lambda state: (
         has_wily_2_access(state, player)
-        and (can_traverse_vertical(state, player) or state.has(names.freeze_cracker, player))
+        and (
+            can_traverse_vertical(state, player)
+            or state.has(names.freeze_cracker, player)
+        )
+        and meets_boss_weakness_logic(state, world, names.gamerizer_defeated)
     )
 
     multiworld.get_location(names.gamerizer_defeated_item, player).access_rule = lambda state: (
         has_wily_2_access(state, player)
-        and (can_traverse_vertical(state, player) or state.has(names.freeze_cracker, player))
+        and (
+            can_traverse_vertical(state, player)
+            or state.has(names.freeze_cracker, player)
+        )
+        and meets_boss_weakness_logic(state, world, names.gamerizer_defeated)
     )
 
     multiworld.get_location(names.hannya_ned_defeated, player).access_rule = lambda state: (
-        has_wily_3_access(state, player) and can_traverse_vertical(state, player)
+        has_wily_3_access(state, player)
+        and can_traverse_vertical(state, player)
+        and meets_boss_weakness_logic(state, world, names.hannya_ned_defeated)
     )
 
     multiworld.get_location(names.hannya_ned_defeated_item, player).access_rule = lambda state: (
-        has_wily_3_access(state, player) and can_traverse_vertical(state, player)
+        has_wily_3_access(state, player)
+        and can_traverse_vertical(state, player)
+        and meets_boss_weakness_logic(state, world, names.hannya_ned_defeated)
     )
 
-    multiworld.get_location(names.wily_capsule, player).access_rule = lambda state: has_wily_4_access(state, world)
+    multiworld.get_location(names.wily_capsule, player).access_rule = lambda state: (
+        has_wily_4_access(state, world)
+        and meets_boss_weakness_logic(state, world, names.wily_capsule)
+    )
 
     multiworld.completion_condition[player] = lambda state: state.has(names.wily_capsule, player)
