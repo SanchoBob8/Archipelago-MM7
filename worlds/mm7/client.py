@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from NetUtils import ClientStatus
+from Utils import async_start
 from worlds.AutoSNIClient import SNIClient
 
 from . import names
@@ -16,6 +18,15 @@ snes_logger = logging.getLogger("SNES")
 # See existing SNES/SNI worlds such as Super Mario World.
 ROM_START = 0x000000
 WRAM_START = 0xF50000
+
+MM7_HEALTH = WRAM_START + 0x0C2E
+MM7_LIVES = WRAM_START + 0x0B81
+
+MM7_PLAYER_STATE = WRAM_START + 0x0BD7
+MM7_CONTROL_STATE = WRAM_START + 0x0BC6
+
+MM7_PLAYER_ACTIVE = 0x07
+MM7_CONTROLS_ENABLED = 0x00
 
 MM7_ROM_HEADER = ROM_START + 0x00FFC0
 ROM_HEADER_SIZE = 0x15
@@ -101,6 +112,53 @@ class MM7SNIClient(SNIClient):
     game = "Mega Man 7"
     patch_suffix = ".apmm7"
 
+    def __init__(self) -> None:
+        self.previous_health: Optional[int] = None
+        self.previous_lives: Optional[int] = None
+        self.previous_player_ready = False
+
+    async def deathlink_kill_player(self, ctx) -> None:
+        from SNIClient import (
+            DeathState,
+            snes_buffered_write,
+            snes_flush_writes,
+            snes_read,
+        )
+
+        health_raw = await snes_read(ctx, MM7_HEALTH, 1)
+        player_state_raw = await snes_read(ctx, MM7_PLAYER_STATE, 1)
+        control_state_raw = await snes_read(ctx, MM7_CONTROL_STATE, 1)
+
+        if (
+            health_raw is None
+            or player_state_raw is None
+            or control_state_raw is None
+        ):
+            await asyncio.sleep(0.1)
+            return
+
+        health = health_raw[0]
+        player_state = player_state_raw[0]
+        control_state = control_state_raw[0]
+
+        player_ready = (
+            player_state == MM7_PLAYER_ACTIVE
+            and control_state == MM7_CONTROLS_ENABLED
+            and health > 0
+        )
+
+        # Keep the incoming DeathLink pending until Mega Man is alive,
+        # inside active gameplay, and accepting player input.
+        if not player_ready:
+            await asyncio.sleep(0.1)
+            return
+
+        snes_buffered_write(ctx, MM7_HEALTH, b"\x00")
+        await snes_flush_writes(ctx)
+
+        # Prevent the resulting local death from being sent back.
+        ctx.death_state = DeathState.dead
+
     async def validate_rom(self, ctx) -> bool:
         from SNIClient import snes_read
 
@@ -129,9 +187,29 @@ class MM7SNIClient(SNIClient):
         ctx.game = self.game
         ctx.items_handling = 0b111
         ctx.want_slot_data = True
+        if ctx.rom != auth_token:
+            self.previous_health = None
+            self.previous_lives = None
+            self.previous_player_ready = False
         ctx.rom = auth_token
 
         return True
+
+    def on_package(self, ctx, cmd: str, args: Dict[str, Any]) -> None:
+        if cmd != "Connected":
+            return
+
+        self.previous_health = None
+        self.previous_lives = None
+        self.previous_player_ready = False
+
+        slot_data = args.get("slot_data") or {}
+        death_link_enabled = bool(slot_data.get("death_link", False))
+
+        async_start(
+            ctx.update_death_link(death_link_enabled),
+            name="Update MM7 DeathLink",
+        )
 
     async def game_watcher(self, ctx) -> None:
         from SNIClient import snes_buffered_write, snes_flush_writes, snes_read
@@ -139,6 +217,76 @@ class MM7SNIClient(SNIClient):
         # If we are not connected to an AP room yet, do not try to sync.
         if ctx.server is None or ctx.slot is None:
             return
+
+        # DeathLink
+        if "DeathLink" not in ctx.tags:
+            self.previous_health = None
+            self.previous_lives = None
+            self.previous_player_ready = False
+        else:
+            health_raw = await snes_read(ctx, MM7_HEALTH, 1)
+            lives_raw = await snes_read(ctx, MM7_LIVES, 1)
+            player_state_raw = await snes_read(ctx, MM7_PLAYER_STATE, 1)
+            control_state_raw = await snes_read(ctx, MM7_CONTROL_STATE, 1)
+
+            if (
+                health_raw is None
+                or lives_raw is None
+                or player_state_raw is None
+                or control_state_raw is None
+            ):
+                return
+
+            current_health = health_raw[0]
+            current_lives = lives_raw[0]
+            current_player_state = player_state_raw[0]
+            current_control_state = control_state_raw[0]
+
+            current_player_ready = (
+                current_player_state == MM7_PLAYER_ACTIVE
+                and current_control_state == MM7_CONTROLS_ENABLED
+                and current_health > 0
+            )
+
+            health_dropped_to_zero = (
+                self.previous_health is not None
+                and self.previous_health > 0
+                and current_health == 0
+            )
+
+            # Normal deaths decrement the remaining-life counter.
+            lost_life = (
+                self.previous_lives is not None
+                and self.previous_lives > 0
+                and current_lives == self.previous_lives - 1
+                and current_health == 0
+            )
+
+            # With zero remaining lives, the counter cannot decrement again.
+            # Detect the health transition while the game still reports the
+            # active, control-enabled gameplay state.
+            lost_final_life = (
+                self.previous_lives == 0
+                and current_lives == 0
+                and self.previous_player_ready
+                and health_dropped_to_zero
+                and current_player_state == MM7_PLAYER_ACTIVE
+                and current_control_state == MM7_CONTROLS_ENABLED
+            )
+
+            if lost_life or lost_final_life:
+                player_name = ctx.player_names.get(ctx.slot, "Mega Man")
+
+                await ctx.handle_deathlink_state(
+                    True,
+                    f"{player_name} was defeated in Mega Man 7.",
+                )
+            elif current_player_ready:
+                await ctx.handle_deathlink_state(False)
+
+            self.previous_health = current_health
+            self.previous_lives = current_lives
+            self.previous_player_ready = current_player_ready
 
         # 1. Send boss-defeat location checks from ROM flags.
         boss_flags = await snes_read(ctx, AP_BOSS_FLAGS, 1)
@@ -164,7 +312,7 @@ class MM7SNIClient(SNIClient):
 
             if location_id not in ctx.locations_checked:
                 new_checks.append(location_id)
-                
+
         proto_flags_raw = await snes_read(ctx, AP_BOSS_FLAGS_2, 1)
         if proto_flags_raw is None:
             return

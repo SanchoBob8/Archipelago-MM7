@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from Options import Choice, PerGameCommonOptions, Range, Toggle
+from Options import Choice, DeathLink, PerGameCommonOptions, Range, Toggle
 
 
 class LogicBossWeakness(Toggle):
@@ -163,6 +163,7 @@ class RobotMastersRequiredForRobotMuseum(Range):
 
 @dataclass
 class MegaMan7Options(PerGameCommonOptions):
+    death_link: DeathLink
     logic_boss_weakness: LogicBossWeakness
     starting_lives: StartingLives
     starting_bolts: StartingBolts
