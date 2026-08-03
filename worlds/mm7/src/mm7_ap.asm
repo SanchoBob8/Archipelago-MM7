@@ -2107,13 +2107,30 @@ AP_RobotMuseumRouteGate:
     BCC .next_bit
 
     INX
-    CPX #$04
+    TXA
+    CMP.l AP_ConfigRobotMuseumRobotMasters
     BCS .go_robot_museum
 
 .next_bit:
     BRA .count_loop
 
 .go_robot_museum:
+    ; Enter Robot Museum normally when skipping is disabled.
+    LDA.l AP_ConfigSkipRobotMuseum
+    BEQ .enter_robot_museum
+
+    ; Preserve the vanilla state normally updated after Robot Museum.
+    INC $0B7A
+
+    ; Automatically mark Mash / Robot Museum location checked.
+    LDA.l !AP_MISC_FLAGS
+    ORA #$02
+    STA.l !AP_MISC_FLAGS
+
+    ; Continue without entering Robot Museum.
+    BRA .normal_route
+
+.enter_robot_museum:
     PLX
     PLP
     JML $C00C72
@@ -2797,7 +2814,10 @@ AP_ConfigWily4Weapons:
     db $08
 AP_ConfigSkipIntroStage:
     db $00
-
+AP_ConfigSkipRobotMuseum:
+    db $00
+AP_ConfigRobotMuseumRobotMasters:
+    db $04
 ; ============================================
 ; AP ROM auth token
 ;

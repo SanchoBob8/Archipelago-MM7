@@ -141,6 +141,26 @@ class SkipIntroStage(Toggle):
     display_name = "Skip Intro Stage"
     default = False
 
+class SkipRobotMuseum(Toggle):
+    """
+    Skips the Robot Museum stage and automatically awards the corresponding check
+    when Robot Museum would normally become available.
+    """
+
+    display_name = "Skip Robot Museum"
+    default = False
+
+class RobotMastersRequiredForRobotMuseum(Range):
+    """
+    Number of defeated Robot Masters required before Robot Museum
+    becomes available.
+    """
+
+    display_name = "Robot Masters Required for Robot Museum"
+    range_start = 1
+    range_end = 8
+    default = 4
+
 @dataclass
 class MegaMan7Options(PerGameCommonOptions):
     logic_boss_weakness: LogicBossWeakness
@@ -158,3 +178,5 @@ class MegaMan7Options(PerGameCommonOptions):
     wily_4_robot_masters: Wily4RobotMasters
     wily_4_weapons: Wily4Weapons
     skip_intro_stage: SkipIntroStage
+    skip_robot_museum: SkipRobotMuseum
+    robot_museum_robot_masters: RobotMastersRequiredForRobotMuseum

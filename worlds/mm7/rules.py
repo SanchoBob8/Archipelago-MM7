@@ -77,8 +77,13 @@ def defeated_boss_count(state: CollectionState, player: int) -> int:
     return sum(state.has(boss, player) for boss in MAIN_BOSSES)
 
 
-def has_robot_museum_access(state: CollectionState, player: int) -> bool:
-    return defeated_boss_count(state, player) >= 4
+def has_robot_museum_access(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    return defeated_boss_count(state, world.player) >= (
+        world.options.robot_museum_robot_masters.value
+    )
 
 
 def has_wily_1_access(state: CollectionState, player: int) -> bool:
@@ -195,6 +200,22 @@ def can_defeat_boss(state: CollectionState, player: int, boss: str) -> bool:
 
     return has_any(state, player, WEAKNESS_TABLE[boss])
 
+def can_check_mash(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    if not has_robot_museum_access(state, world):
+        return False
+
+    if world.options.skip_robot_museum.value:
+        return True
+
+    return meets_boss_weakness_logic(
+        state,
+        world,
+        names.mash_defeated,
+    )
+
 
 def can_use_exit_unit_after_check(
     state: CollectionState,
@@ -264,9 +285,8 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
     # ROM routing is based on AP boss medals.
     # ============================================================
 
-    multiworld.get_location(names.mash_defeated, player).access_rule = lambda state: (
-        has_robot_museum_access(state, player)
-        and meets_boss_weakness_logic(state, world, names.mash_defeated)
+    multiworld.get_location(names.mash_defeated, player).access_rule = (
+        lambda state: can_check_mash(state, world)
     )
 
     # ============================================================

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, Optional
 
-from NetUtils import ClientStatus, color
+from NetUtils import ClientStatus
 from worlds.AutoSNIClient import SNIClient
 
 from . import names
@@ -305,18 +305,6 @@ class MM7SNIClient(SNIClient):
         if receive_id is None:
             snes_logger.warning("No MM7 ROM receive id for item: %s", item_name)
             return
-
-        sending_player = ctx.player_names.get(network_item.player, f"Player {network_item.player}")
-        location_text = ctx.location_names.lookup_in_slot(network_item.location, network_item.player)
-
-        snes_logger.info(
-            "Received %s from %s at %s (%d/%d)",
-            color(item_name, "red", "bold"),
-            color(sending_player, "yellow"),
-            location_text,
-            recv_index + 1,
-            len(ctx.items_received),
-        )
 
         snes_buffered_write(ctx, AP_ITEM_ID_LO, bytes([receive_id & 0xFF]))
         snes_buffered_write(ctx, AP_ITEM_ID_HI, bytes([(receive_id >> 8) & 0xFF]))
