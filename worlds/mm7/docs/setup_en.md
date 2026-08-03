@@ -48,4 +48,8 @@ By default, opening a patch file will do some of the steps below for you automat
 
 You should now be able to receive and send items.
 
-You'll need to do these steps every time you want to reconnect. It is safe to make progress offline; everything will re-sync when you reconnect.
+You'll need to follow these connection steps again whenever the emulator or client is restarted.
+
+It is safe to temporarily lose the server connection while the patched ROM remains running. Checks and received items will synchronize again after reconnecting.
+
+The vanilla Mega Man 7 password system does not preserve Archipelago items, location checks, or randomized progression. Use emulator save states if you need to close the emulator and resume the same game later.

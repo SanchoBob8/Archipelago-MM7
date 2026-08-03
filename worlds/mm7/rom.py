@@ -17,7 +17,10 @@ if TYPE_CHECKING:
 MM7_ROM_CONFIG_OFFSET = 0x18FEA0
 MM7_ROM_CONFIG_SIZE = 17
 
-MM7_KNOWN_MD5: set[str] = set()
+MM7_USA_MD5 = "301d8c4f1b5de2cd10b68686b17b281a"
+MM7_KNOWN_MD5: set[str] = {
+    MM7_USA_MD5,
+}
 MM7_ROM_AUTH_TOKEN_OFFSET = 0x18FEC0
 MM7_ROM_AUTH_TOKEN_SIZE = 32
 MM7_ROM_AUTH_TOKEN_PREFIX = b"MM7AP"
@@ -91,7 +94,7 @@ class MM7ProcedurePatch(APProcedurePatch, APTokenMixin):
     patch_file_ending = ".apmm7"
     result_file_ending = ".sfc"
 
-    hash = []
+    hash = MM7_USA_MD5
 
     procedure = [
         ("apply_bsdiff4", ["mm7_basepatch.bsdiff4"]),

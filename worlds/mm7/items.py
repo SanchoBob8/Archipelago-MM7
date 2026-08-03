@@ -57,8 +57,14 @@ item_table: Dict[str, MM7ItemData] = {
     # Upgrades / useful items
     # ========================================================
     names.proto_shield: MM7ItemData(0x0F, ItemClassification.useful),
-    names.hyper_bolt: MM7ItemData(0x10, ItemClassification.useful),
-    names.exit_unit: MM7ItemData(0x11, ItemClassification.useful),
+    names.hyper_bolt: MM7ItemData(
+        0x10,
+        ItemClassification.progression | ItemClassification.useful,
+    ),
+    names.exit_unit: MM7ItemData(
+        0x11,
+        ItemClassification.progression | ItemClassification.useful,
+    ),
     names.hyper_rocket_buster: MM7ItemData(0x12, ItemClassification.useful),
     names.energy_balancer: MM7ItemData(0x13, ItemClassification.useful),
     names.beat: MM7ItemData(0x14, ItemClassification.useful),
@@ -129,7 +135,7 @@ progression_items: Set[str] = {
 useful_items: Set[str] = {
     item_name
     for item_name, data in item_table.items()
-    if data.classification == ItemClassification.useful
+    if data.classification & ItemClassification.useful
 }
 
 filler_items: List[str] = [

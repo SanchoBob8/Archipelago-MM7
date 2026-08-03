@@ -130,3 +130,18 @@ class TestWily4RequirementWeaponsMaximum(MM7TestBase):
         "wily_4_requirement_type": "weapons",
         "wily_4_weapons": 8,
     }
+
+class TestRobotMuseumOptionsMinimum(MM7TestBase):
+    options = {
+        "skip_intro_stage": False,
+        "skip_robot_museum": False,
+        "robot_museum_robot_masters": 1,
+    }
+
+
+class TestRobotMuseumOptionsMaximum(MM7TestBase):
+    options = {
+        "skip_intro_stage": True,
+        "skip_robot_museum": True,
+        "robot_museum_robot_masters": 8,
+    }

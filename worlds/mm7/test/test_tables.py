@@ -1,14 +1,18 @@
 import unittest
+from collections import Counter
 
-from .. import names
-from .. import ITEM_POOL
-from ..items import item_table, rom_receive_id
+from .. import ITEM_POOL, names
+from ..items import (
+    get_pool_items,
+    item_table,
+    rom_receive_id,
+)
 from ..locations import (
     active_locations,
-    location_table,
-    location_name_to_id,
-    event_locations,
     event_location_to_item,
+    event_locations,
+    location_name_to_id,
+    location_table,
     wily_boss_event_locations,
     wily_boss_item_locations,
 )
@@ -87,3 +91,37 @@ class TestMM7PoolTables(unittest.TestCase):
 
             with self.subTest(location=location_name):
                 self.assertIn(location_name, location_name_to_id)
+    def test_item_pool_matches_item_table_counts(self) -> None:
+        self.assertEqual(
+            Counter(get_pool_items()),
+            Counter(ITEM_POOL),
+            "ITEM_POOL must contain exactly the non-event items and counts "
+            "defined by item_table.",
+        )
+
+    def test_all_pool_items_have_rom_receive_ids(self) -> None:
+        for item_name in set(ITEM_POOL):
+            with self.subTest(item=item_name):
+                self.assertIn(
+                    item_name,
+                    rom_receive_id,
+                    f"{item_name} is in ITEM_POOL but has no ROM receive ID.",
+                )
+
+    def test_rom_receive_items_exist_in_item_table(self) -> None:
+        for item_name in rom_receive_id:
+            with self.subTest(item=item_name):
+                self.assertIn(
+                    item_name,
+                    item_table,
+                    f"{item_name} has a ROM receive ID but is missing from item_table.",
+                )
+
+    def test_rom_receive_ids_are_unique(self) -> None:
+        receive_ids = list(rom_receive_id.values())
+
+        self.assertEqual(
+            len(receive_ids),
+            len(set(receive_ids)),
+            "Every MM7 item must have a unique ROM receive ID.",
+        )
