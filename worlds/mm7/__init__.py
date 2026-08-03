@@ -179,6 +179,7 @@ class MegaMan7World(World):
     def fill_slot_data(self) -> Dict[str, Any]:
         return {
             "minimal": True,
+            "death_link": bool(self.options.death_link.value),
             "ap_wram_base": 0x1FA1,
             "boss_flag_order": {
                 "freeze": 0x01,

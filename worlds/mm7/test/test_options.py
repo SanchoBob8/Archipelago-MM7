@@ -145,3 +145,20 @@ class TestRobotMuseumOptionsMaximum(MM7TestBase):
         "skip_robot_museum": True,
         "robot_museum_robot_masters": 8,
     }
+
+class TestDeathLinkDisabled(MM7TestBase):
+    options = {
+        "death_link": False,
+    }
+
+    def test_death_link_disabled_in_slot_data(self) -> None:
+        self.assertFalse(self.world.fill_slot_data()["death_link"])
+
+
+class TestDeathLinkEnabled(MM7TestBase):
+    options = {
+        "death_link": True,
+    }
+
+    def test_death_link_enabled_in_slot_data(self) -> None:
+        self.assertTrue(self.world.fill_slot_data()["death_link"])
