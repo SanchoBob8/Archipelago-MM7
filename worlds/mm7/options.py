@@ -10,6 +10,16 @@ class LogicBossWeakness(Toggle):
     display_name = "Boss Weakness Logic"
     default = False
 
+class RobotMasterAccessCodes(Toggle):
+    """
+    Locks each Robot Master stage behind its corresponding Access Code.
+
+    One random Robot Master Access Code is granted at the start so that
+    at least one stage is immediately available.
+    """
+
+    display_name = "Robot Master Access Codes"
+    default = False
 
 class StartingLives(Range):
     """
@@ -164,6 +174,7 @@ class RobotMastersRequiredForRobotMuseum(Range):
 @dataclass
 class MegaMan7Options(PerGameCommonOptions):
     death_link: DeathLink
+    robot_master_access_codes: RobotMasterAccessCodes
     logic_boss_weakness: LogicBossWeakness
     starting_lives: StartingLives
     starting_bolts: StartingBolts

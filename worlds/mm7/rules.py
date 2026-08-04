@@ -63,16 +63,19 @@ WEAKNESS_TABLE = {
 
 def has_robot_master_stage_access(
     state: CollectionState,
-    player: int,
+    world: "MegaMan7World",
     stage_clear_event: str,
 ) -> bool:
+    if not world.options.robot_master_access_codes.value:
+        return True
+
     access_code = ROBOT_MASTER_ACCESS_CODE_TABLE.get(
         stage_clear_event
     )
 
     return (
         access_code is not None
-        and state.has(access_code, player)
+        and state.has(access_code, world.player)
     )
 
 def meets_boss_weakness_logic(
@@ -269,7 +272,7 @@ def can_leave_stage_after_check(
 
     if not has_robot_master_stage_access(
         state,
-        player,
+        world,
         stage_clear_event,
     ):
         return False
@@ -289,11 +292,9 @@ def can_leave_stage_after_check(
 
 def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
     for boss, item_location in BOSS_ITEM_LOCATION_TABLE.items():
-        access_code = ROBOT_MASTER_ACCESS_CODE_TABLE[boss]
-
         boss_rule = (
-            lambda state, b=boss, code=access_code:
-            state.has(code, player)
+            lambda state, b=boss:
+            has_robot_master_stage_access(state, world, b)
             and meets_boss_weakness_logic(state, world, b)
         )
 

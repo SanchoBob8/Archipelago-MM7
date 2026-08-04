@@ -1,3 +1,4 @@
+from ..items import robot_master_access_code_items
 from .bases import MM7TestBase
 
 
@@ -162,3 +163,61 @@ class TestDeathLinkEnabled(MM7TestBase):
 
     def test_death_link_enabled_in_slot_data(self) -> None:
         self.assertTrue(self.world.fill_slot_data()["death_link"])
+
+class TestRobotMasterAccessCodesDisabled(MM7TestBase):
+    options = {
+        "robot_master_access_codes": False,
+    }
+
+    def test_access_codes_not_precollected(self) -> None:
+        precollected_names = {
+            item.name
+            for item in self.multiworld.precollected_items[self.player]
+        }
+
+        self.assertTrue(
+            precollected_names.isdisjoint(
+                robot_master_access_code_items
+            )
+        )
+
+    def test_access_codes_not_in_pool(self) -> None:
+        pool_names = {
+            item.name
+            for item in self.multiworld.itempool
+            if item.player == self.player
+        }
+
+        self.assertTrue(
+            pool_names.isdisjoint(
+                robot_master_access_code_items
+            )
+        )
+
+
+class TestRobotMasterAccessCodesEnabled(MM7TestBase):
+    options = {
+        "robot_master_access_codes": True,
+        "logic_boss_weakness": False,
+    }
+
+    def test_one_access_code_is_precollected(self) -> None:
+        precollected_codes = [
+            item.name
+            for item in self.multiworld.precollected_items[self.player]
+            if item.name in robot_master_access_code_items
+        ]
+
+        self.assertEqual(1, len(precollected_codes))
+
+    def test_seven_access_codes_are_randomized(self) -> None:
+        randomized_codes = [
+            item.name
+            for item in self.multiworld.itempool
+            if (
+                item.player == self.player
+                and item.name in robot_master_access_code_items
+            )
+        ]
+
+        self.assertEqual(7, len(randomized_codes))

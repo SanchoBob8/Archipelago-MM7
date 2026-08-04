@@ -29,7 +29,7 @@ class TestRobotMuseumLogic(MM7TestBase):
         count: int,
     ) -> None:
         for boss_event in ROBOT_MASTER_EVENTS[:count]:
-            state.collect(self.get_item_by_name(boss_event))
+            state.add_item(boss_event, self.player)
 
     def test_robot_museum_requirements_1_4_and_8(self) -> None:
         mash = self.multiworld.get_location(
@@ -55,10 +55,9 @@ class TestRobotMuseumLogic(MM7TestBase):
                     f"{required - 1} Robot Masters when {required} are required.",
                 )
 
-                state.collect(
-                    self.get_item_by_name(
-                        ROBOT_MASTER_EVENTS[required - 1]
-                    )
+                state.add_item(
+                    ROBOT_MASTER_EVENTS[required - 1],
+                    self.player,
                 )
 
                 self.assertTrue(
@@ -84,7 +83,7 @@ class TestRobotMuseumLogic(MM7TestBase):
             "Mash should require Danger Wrap when Robot Museum is not skipped.",
         )
 
-        state.collect(self.get_item_by_name(names.danger_wrap))
+        state.add_item(names.danger_wrap, self.player)
 
         self.assertTrue(
             mash.can_reach(state),
@@ -108,8 +107,9 @@ class TestRobotMuseumLogic(MM7TestBase):
             "Skipping Robot Museum must not bypass the Robot Master requirement.",
         )
 
-        state.collect(
-            self.get_item_by_name(ROBOT_MASTER_EVENTS[3])
+        state.add_item(
+            ROBOT_MASTER_EVENTS[3],
+            self.player,
         )
 
         self.assertTrue(

@@ -6,7 +6,13 @@ import base64
 import os
 from typing import Any, Dict, Optional
 
-from BaseClasses import ItemClassification, Region, Tutorial
+from BaseClasses import (
+    Item,
+    ItemClassification,
+    Location,
+    Region,
+    Tutorial,
+)
 from worlds.AutoWorld import WebWorld, World
 
 from . import names
@@ -31,6 +37,7 @@ from .options import MegaMan7Options
 from .rom import MM7ProcedurePatch, MM7Settings, patch_rom, get_rom_auth_token
 from .client import MM7SNIClient
 from .rules import (
+    BOSS_ITEM_LOCATION_TABLE,
     ROBOT_MASTER_ACCESS_CODE_TABLE,
     WEAKNESS_TABLE,
     set_rules as set_mm7_rules,
@@ -66,8 +73,8 @@ class MegaMan7World(World):
     settings: MM7Settings
     settings_key = "mm7_options"
 
-    starting_robot_master: str
-    starting_robot_master_access_code: str
+    starting_robot_master: Optional[str]
+    starting_robot_master_access_code: Optional[str]
     starting_robot_master_weakness: Optional[str]
 
     location_name_to_id = location_name_to_id
@@ -84,9 +91,16 @@ class MegaMan7World(World):
         return MM7Item(name, ItemClassification.progression, None, self.player)
 
     def create_items(self) -> None:
-        starter_items = [
-            self.starting_robot_master_access_code,
-        ]
+        access_codes_enabled = bool(
+            self.options.robot_master_access_codes.value
+        )
+
+        starter_items: list[str] = []
+
+        if self.starting_robot_master_access_code is not None:
+            starter_items.append(
+                self.starting_robot_master_access_code
+            )
 
         if self.starting_robot_master_weakness is not None:
             starter_items.append(
@@ -99,11 +113,13 @@ class MegaMan7World(World):
             )
 
         pool = get_pool_items(
-            excluded_items=set(starter_items)
+            excluded_items=set(starter_items),
+            include_robot_master_access_codes=access_codes_enabled,
         )
 
-        # With weakness logic enabled, two items were precollected instead
-        # of one. Add one filler item to preserve the item/location count.
+        # When weakness logic is enabled alongside Access Codes, the matching
+        # starting weapon is also precollected. Add one filler to preserve the
+        # randomized item/location count.
         if self.starting_robot_master_weakness is not None:
             pool.append(self.get_filler_item_name())
 
@@ -163,6 +179,13 @@ class MegaMan7World(World):
         )
 
     def generate_early(self) -> None:
+        self.starting_robot_master = None
+        self.starting_robot_master_access_code = None
+        self.starting_robot_master_weakness = None
+
+        if not self.options.robot_master_access_codes.value:
+            return
+
         self.starting_robot_master = self.random.choice(
             tuple(ROBOT_MASTER_ACCESS_CODE_TABLE)
         )
@@ -172,8 +195,6 @@ class MegaMan7World(World):
                 self.starting_robot_master
             ]
         )
-
-        self.starting_robot_master_weakness = None
 
         if self.options.logic_boss_weakness.value:
             self.starting_robot_master_weakness = self.random.choice(
@@ -189,6 +210,9 @@ class MegaMan7World(World):
         return {
             "minimal": True,
             "death_link": bool(self.options.death_link.value),
+            "robot_master_access_codes": bool(
+                self.options.robot_master_access_codes.value
+            ),
             "ap_wram_base": 0x1FA1,
             "boss_flag_order": {
                 "freeze": 0x01,
@@ -201,3 +225,131 @@ class MegaMan7World(World):
                 "spring": 0x80,
             },
         }
+
+    def fill_hook(
+        self,
+        progitempool: list[Item],
+        usefulitempool: list[Item],
+        filleritempool: list[Item],
+        fill_locations: list[Location],
+    ) -> None:
+        if not self.options.robot_master_access_codes.value:
+            return
+
+        if not self.options.logic_boss_weakness.value:
+            return
+
+        if self.multiworld.players > 1:
+            return
+
+        affected_starting_bosses = {
+            names.cloud_man_defeated,
+            names.slash_man_defeated,
+            names.shade_man_defeated,
+        }
+
+        if self.starting_robot_master not in affected_starting_bosses:
+            return
+
+        starting_weapon = self.starting_robot_master_weakness
+        if starting_weapon is None:
+            return
+
+        productive_second_bosses = {
+            names.burst_man_defeated,
+            names.junk_man_defeated,
+            names.freeze_man_defeated,
+            names.spring_man_defeated,
+            names.turbo_man_defeated,
+        }
+
+        candidates: list[tuple[str, Item, bool]] = []
+
+        for boss in productive_second_bosses:
+            access_code_name = ROBOT_MASTER_ACCESS_CODE_TABLE[boss]
+
+            access_code_item = next(
+                (
+                    item
+                    for item in progitempool
+                    if item.player == self.player
+                    and item.name == access_code_name
+                ),
+                None,
+            )
+
+            if access_code_item is None:
+                continue
+
+            candidates.append(
+                (
+                    boss,
+                    access_code_item,
+                    starting_weapon in WEAKNESS_TABLE[boss],
+                )
+            )
+
+        if not candidates:
+            raise RuntimeError(
+                "MM7 could not find a productive second Robot Master "
+                "Access Code during fill."
+            )
+
+        # Prefer a stage that is already weak to the starting weapon.
+        shared_weakness_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate[2]
+        ]
+
+        second_boss, access_code_item, already_has_weakness = (
+            self.random.choice(
+                shared_weakness_candidates or candidates
+            )
+        )
+
+        starting_boss_reward = self.get_location(
+            BOSS_ITEM_LOCATION_TABLE[self.starting_robot_master]
+        )
+
+        if starting_boss_reward not in fill_locations:
+            raise RuntimeError(
+                f"MM7 expected {starting_boss_reward.name} to be "
+                f"available during fill."
+            )
+
+        # Clearing the starting boss unlocks a productive second stage.
+        starting_boss_reward.place_locked_item(access_code_item)
+        progitempool.remove(access_code_item)
+        fill_locations.remove(starting_boss_reward)
+
+        if already_has_weakness:
+            return
+
+        valid_weakness_items = [
+            item
+            for item in progitempool
+            if item.player == self.player
+            and item.name in WEAKNESS_TABLE[second_boss]
+        ]
+
+        if not valid_weakness_items:
+            raise RuntimeError(
+                f"MM7 could not find a weakness for {second_boss} "
+                f"during fill."
+            )
+
+        weakness_item = self.random.choice(valid_weakness_items)
+
+        intro_location = self.get_location(names.rush_coil_loc)
+
+        if intro_location not in fill_locations:
+            raise RuntimeError(
+                f"MM7 expected {intro_location.name} to be "
+                f"available during fill."
+            )
+
+        # Intro provides the weakness required by the second stage.
+        intro_location.place_locked_item(weakness_item)
+        progitempool.remove(weakness_item)
+        fill_locations.remove(intro_location)

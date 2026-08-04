@@ -317,14 +317,8 @@ def get_filler_item_name(world) -> str:
 
 def get_pool_items(
     excluded_items: Optional[Set[str]] = None,
+    include_robot_master_access_codes: bool = False,
 ) -> List[str]:
-    """
-    Build the randomized item pool.
-
-    Filler items remain registered so that Archipelago can create them
-    when explicitly requested, but normal MM7 generation uses the
-    progression and useful items only.
-    """
     excluded_items = excluded_items or set()
 
     pool: List[str] = []
@@ -333,10 +327,22 @@ def get_pool_items(
         if data.code is None:
             continue
 
-        if data.classification == ItemClassification.filler:
+        if item_name in excluded_items:
             continue
 
-        if item_name in excluded_items:
+        is_robot_master_access_code = (
+            item_name in robot_master_access_code_items
+        )
+
+        if is_robot_master_access_code:
+            if include_robot_master_access_codes:
+                pool.extend([item_name] * data.count)
+
+            continue
+
+        # The seven normal filler items are replaced by the seven
+        # randomized Access Codes when the option is enabled.
+        if include_robot_master_access_codes and item_name in filler_items:
             continue
 
         pool.extend([item_name] * data.count)
