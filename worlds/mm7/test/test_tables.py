@@ -1,10 +1,11 @@
 import unittest
 from collections import Counter
 
-from .. import ITEM_POOL, names
+from .. import names
 from ..items import (
     get_pool_items,
     item_table,
+    robot_master_access_codes,
     rom_receive_id,
 )
 from ..locations import (
@@ -62,18 +63,34 @@ class TestMM7Tables(unittest.TestCase):
                 self.assertNotIn(location_name, event_location_to_item)
 
 class TestMM7PoolTables(unittest.TestCase):
-    def test_minimal_pool_matches_randomized_active_locations(self) -> None:
+    def test_pool_matches_randomized_locations_for_every_starter(
+        self,
+    ) -> None:
         randomized_active_locations = [
             location_name
             for location_name in active_locations
             if location_name not in event_locations
         ]
 
-        self.assertEqual(
-            len(randomized_active_locations),
-            len(ITEM_POOL),
-            "ITEM_POOL must contain exactly one item per randomized active location.",
-        )
+        for starter_access_code in robot_master_access_codes:
+            with self.subTest(starter=starter_access_code):
+                pool = get_pool_items(
+                    excluded_items={starter_access_code}
+                )
+
+                self.assertEqual(
+                    len(randomized_active_locations),
+                    len(pool),
+                )
+
+                self.assertNotIn(
+                    starter_access_code,
+                    pool,
+                )
+
+                for access_code in robot_master_access_codes:
+                    if access_code != starter_access_code:
+                        self.assertIn(access_code, pool)
     def test_active_locations_exist_in_location_table(self) -> None:
         for location_name in active_locations:
             with self.subTest(location=location_name):
@@ -91,22 +108,6 @@ class TestMM7PoolTables(unittest.TestCase):
 
             with self.subTest(location=location_name):
                 self.assertIn(location_name, location_name_to_id)
-    def test_item_pool_matches_item_table_counts(self) -> None:
-        self.assertEqual(
-            Counter(get_pool_items()),
-            Counter(ITEM_POOL),
-            "ITEM_POOL must contain exactly the non-event items and counts "
-            "defined by item_table.",
-        )
-
-    def test_all_pool_items_have_rom_receive_ids(self) -> None:
-        for item_name in set(ITEM_POOL):
-            with self.subTest(item=item_name):
-                self.assertIn(
-                    item_name,
-                    rom_receive_id,
-                    f"{item_name} is in ITEM_POOL but has no ROM receive ID.",
-                )
 
     def test_rom_receive_items_exist_in_item_table(self) -> None:
         for item_name in rom_receive_id:
@@ -125,3 +126,30 @@ class TestMM7PoolTables(unittest.TestCase):
             len(set(receive_ids)),
             "Every MM7 item must have a unique ROM receive ID.",
         )
+
+    def test_robot_master_access_items_exist(self) -> None:
+        for item_name in robot_master_access_codes:
+            with self.subTest(item=item_name):
+                self.assertIn(item_name, item_table)
+
+
+    def test_robot_master_access_items_have_rom_receive_ids(
+        self,
+    ) -> None:
+        expected = {
+            names.freeze_man_access: 0x22,
+            names.cloud_man_access: 0x23,
+            names.junk_man_access: 0x24,
+            names.turbo_man_access: 0x25,
+            names.slash_man_access: 0x26,
+            names.shade_man_access: 0x27,
+            names.burst_man_access: 0x28,
+            names.spring_man_access: 0x29,
+        }
+
+        for item_name, receive_id in expected.items():
+            with self.subTest(item=item_name):
+                self.assertEqual(
+                    receive_id,
+                    rom_receive_id[item_name],
+                )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, Optional
 
 from BaseClasses import ItemClassification, Region, Tutorial
 from worlds.AutoWorld import WebWorld, World
@@ -12,10 +12,12 @@ from worlds.AutoWorld import WebWorld, World
 from . import names
 from .items import (
     MM7Item,
-    item_groups,
-    item_name_to_id,
     create_item as create_mm7_item,
     get_filler_item_name as get_mm7_filler_item_name,
+    get_pool_items,
+    item_groups,
+    item_name_to_id,
+    robot_master_access_codes,
 )
 
 from .locations import (
@@ -28,7 +30,11 @@ from .locations import (
 from .options import MegaMan7Options
 from .rom import MM7ProcedurePatch, MM7Settings, patch_rom, get_rom_auth_token
 from .client import MM7SNIClient
-from .rules import set_rules as set_mm7_rules
+from .rules import (
+    ROBOT_MASTER_ACCESS_CODE_TABLE,
+    WEAKNESS_TABLE,
+    set_rules as set_mm7_rules,
+)
 
 
 class MegaMan7WebWorld(WebWorld):
@@ -43,55 +49,6 @@ class MegaMan7WebWorld(WebWorld):
             authors=["SanchoBob"],
         )
     ]
-
-
-# One randomized item per active non-event location.
-ITEM_POOL: List[str] = [
-    # Weapons
-    names.freeze_cracker,
-    names.danger_wrap,
-    names.thunder_bolt,
-    names.junk_shield,
-    names.slash_claw,
-    names.wild_coil,
-    names.noise_crush,
-    names.scorch_wheel,
-
-    # Randomized Proto Man clue/items
-    names.proto_man_cloud_man,
-    names.proto_man_turbo_man,
-    names.proto_shield,
-
-    # Rush items
-    names.rush_search,
-    names.rush_jet,
-    names.rush_coil,
-
-    # Rush plates and unique upgrades
-    names.rush_r_plate,
-    names.rush_u_plate,
-    names.rush_s_plate,
-    names.rush_h_plate,
-    names.hyper_bolt,
-    names.exit_unit,
-    names.hyper_rocket_buster,
-    names.energy_balancer,
-    names.beat,
-
-    # Wily access codes
-    names.wily_1_access,
-    names.wily_2_access,
-    names.wily_3_access,
-
-    # Fillers
-    names.one_up,
-    names.one_up,
-    names.e_tank,
-    names.e_tank,
-    names.w_tank,
-    names.w_tank,
-    names.s_tank,
-]
 
 class MegaMan7World(World):
     """Mega Man 7 for Archipelago.
@@ -109,6 +66,10 @@ class MegaMan7World(World):
     settings: MM7Settings
     settings_key = "mm7_options"
 
+    starting_robot_master: str
+    starting_robot_master_access_code: str
+    starting_robot_master_weakness: Optional[str]
+
     location_name_to_id = location_name_to_id
 
     # Use the canonical AP item ids from items.py.
@@ -123,9 +84,51 @@ class MegaMan7World(World):
         return MM7Item(name, ItemClassification.progression, None, self.player)
 
     def create_items(self) -> None:
+        starter_items = [
+            self.starting_robot_master_access_code,
+        ]
+
+        if self.starting_robot_master_weakness is not None:
+            starter_items.append(
+                self.starting_robot_master_weakness
+            )
+
+        for item_name in starter_items:
+            self.multiworld.push_precollected(
+                self.create_item(item_name)
+            )
+
+        pool = get_pool_items(
+            excluded_items=set(starter_items)
+        )
+
+        # With weakness logic enabled, two items were precollected instead
+        # of one. Add one filler item to preserve the item/location count.
+        if self.starting_robot_master_weakness is not None:
+            pool.append(self.get_filler_item_name())
+
+        randomized_location_count = len(location_name_to_id)
+
+        assert len(pool) == randomized_location_count, (
+            f"MM7 item pool contains {len(pool)} items, but "
+            f"{randomized_location_count} randomized locations exist."
+        )
+
         self.multiworld.itempool += [
             self.create_item(item_name)
-            for item_name in ITEM_POOL
+            for item_name in pool
+        ]
+
+        randomized_location_count = len(location_name_to_id)
+
+        assert len(pool) == randomized_location_count, (
+            f"MM7 item pool contains {len(pool)} items, but "
+            f"{randomized_location_count} randomized locations exist."
+        )
+
+        self.multiworld.itempool += [
+            self.create_item(item_name)
+            for item_name in pool
         ]
 
     def create_regions(self) -> None:
@@ -170,6 +173,24 @@ class MegaMan7World(World):
                 f"{self.multiworld.get_out_file_name_base(self.player)}.apmm7",
             )
         )
+
+    def generate_early(self) -> None:
+        self.starting_robot_master = self.random.choice(
+            tuple(ROBOT_MASTER_ACCESS_CODE_TABLE)
+        )
+
+        self.starting_robot_master_access_code = (
+            ROBOT_MASTER_ACCESS_CODE_TABLE[
+                self.starting_robot_master
+            ]
+        )
+
+        self.starting_robot_master_weakness = None
+
+        if self.options.logic_boss_weakness.value:
+            self.starting_robot_master_weakness = self.random.choice(
+                WEAKNESS_TABLE[self.starting_robot_master]
+            )
 
     def modify_multidata(self, multidata: Dict[str, Any]) -> None:
         auth_name = base64.b64encode(get_rom_auth_token(self)).decode()

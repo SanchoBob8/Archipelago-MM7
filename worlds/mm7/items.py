@@ -76,6 +76,42 @@ item_table: Dict[str, MM7ItemData] = {
     names.proto_man_turbo_man: MM7ItemData(0x16, ItemClassification.progression),
 
     # ========================================================
+    # Robot Master Access Codes
+    # ========================================================
+    names.freeze_man_access: MM7ItemData(
+        0x30,
+        ItemClassification.progression,
+    ),
+    names.cloud_man_access: MM7ItemData(
+        0x31,
+        ItemClassification.progression,
+    ),
+    names.junk_man_access: MM7ItemData(
+        0x32,
+        ItemClassification.progression,
+    ),
+    names.turbo_man_access: MM7ItemData(
+        0x33,
+        ItemClassification.progression,
+    ),
+    names.slash_man_access: MM7ItemData(
+        0x34,
+        ItemClassification.progression,
+    ),
+    names.shade_man_access: MM7ItemData(
+        0x35,
+        ItemClassification.progression,
+    ),
+    names.burst_man_access: MM7ItemData(
+        0x36,
+        ItemClassification.progression,
+    ),
+    names.spring_man_access: MM7ItemData(
+        0x37,
+        ItemClassification.progression,
+    ),
+
+    # ========================================================
     # Wily Access Codes
     # ========================================================
     names.wily_1_access: MM7ItemData(0x2D, ItemClassification.progression),
@@ -174,11 +210,29 @@ rush_plate_items: Set[str] = {
     names.rush_h_plate,
 }
 
-access_code_items: Set[str] = {
-    names.wily_1_access,
-    names.wily_2_access,
-    names.wily_3_access,
-}
+robot_master_access_codes = (
+    names.freeze_man_access,
+    names.cloud_man_access,
+    names.junk_man_access,
+    names.turbo_man_access,
+    names.slash_man_access,
+    names.shade_man_access,
+    names.burst_man_access,
+    names.spring_man_access,
+)
+
+robot_master_access_code_items: Set[str] = set(
+    robot_master_access_codes
+)
+
+access_code_items: Set[str] = (
+    robot_master_access_code_items
+    | {
+        names.wily_1_access,
+        names.wily_2_access,
+        names.wily_3_access,
+    }
+)
 
 item_groups: Dict[str, Set[str]] = {
     "Weapons": weapon_items,
@@ -224,6 +278,15 @@ rom_receive_id = {
     names.wily_1_access: 0x1F,
     names.wily_2_access: 0x20,
     names.wily_3_access: 0x21,
+
+    names.freeze_man_access: 0x22,
+    names.cloud_man_access: 0x23,
+    names.junk_man_access: 0x24,
+    names.turbo_man_access: 0x25,
+    names.slash_man_access: 0x26,
+    names.shade_man_access: 0x27,
+    names.burst_man_access: 0x28,
+    names.spring_man_access: 0x29,
 }
 
 
@@ -252,15 +315,30 @@ def get_filler_item_name(world) -> str:
     return world.random.choice(weighted_filler)
 
 
-def get_pool_items() -> List[str]:
-    """Return all non-event item names, expanding item counts.
-
-    This is useful for building the base item pool before trimming or padding
-    against the final number of randomized locations.
+def get_pool_items(
+    excluded_items: Optional[Set[str]] = None,
+) -> List[str]:
     """
+    Build the randomized item pool.
+
+    Filler items remain registered so that Archipelago can create them
+    when explicitly requested, but normal MM7 generation uses the
+    progression and useful items only.
+    """
+    excluded_items = excluded_items or set()
+
     pool: List[str] = []
+
     for item_name, data in item_table.items():
         if data.code is None:
             continue
+
+        if data.classification == ItemClassification.filler:
+            continue
+
+        if item_name in excluded_items:
+            continue
+
         pool.extend([item_name] * data.count)
+
     return pool
