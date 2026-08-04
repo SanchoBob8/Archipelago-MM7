@@ -119,18 +119,6 @@ class MegaMan7World(World):
             for item_name in pool
         ]
 
-        randomized_location_count = len(location_name_to_id)
-
-        assert len(pool) == randomized_location_count, (
-            f"MM7 item pool contains {len(pool)} items, but "
-            f"{randomized_location_count} randomized locations exist."
-        )
-
-        self.multiworld.itempool += [
-            self.create_item(item_name)
-            for item_name in pool
-        ]
-
     def create_regions(self) -> None:
         menu = Region("Menu", self.player, self.multiworld)
         main_stages = Region("Main Stages", self.player, self.multiworld)

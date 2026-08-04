@@ -35,45 +35,7 @@ class TestWilyLogic(MM7TestBase):
 
     def test_wily_capsule_requires_wily_boss_events(self) -> None:
         state = CollectionState(self.multiworld)
-        state.collect(self.get_item_by_name(names.wild_coil))
-
-        self.assertFalse(
-            self.multiworld.get_location(
-                names.wily_capsule,
-                self.player,
-            ).can_reach(state)
-        )
-
-        state.collect(self.get_item_by_name(names.guts_man_g_defeated))
-        self.assertFalse(
-            self.multiworld.get_location(
-                names.wily_capsule,
-                self.player,
-            ).can_reach(state)
-        )
-
-        state.collect(self.get_item_by_name(names.gamerizer_defeated))
-        self.assertFalse(
-            self.multiworld.get_location(
-                names.wily_capsule,
-                self.player,
-            ).can_reach(state)
-        )
-
-        state.collect(self.get_item_by_name(names.hannya_ned_defeated))
-        self.assertTrue(
-            self.multiworld.get_location(
-                names.wily_capsule,
-                self.player,
-            ).can_reach(state)
-        )
-
-    def test_wily_capsule_requires_wild_coil(self) -> None:
-        state = CollectionState(self.multiworld)
-
-        state.collect(self.get_item_by_name(names.guts_man_g_defeated))
-        state.collect(self.get_item_by_name(names.gamerizer_defeated))
-        state.collect(self.get_item_by_name(names.hannya_ned_defeated))
+        state.collect(self.world.create_item(names.wild_coil))
 
         capsule = self.multiworld.get_location(
             names.wily_capsule,
@@ -82,7 +44,42 @@ class TestWilyLogic(MM7TestBase):
 
         self.assertFalse(capsule.can_reach(state))
 
-        state.collect(self.get_item_by_name(names.wild_coil))
+        state.collect(
+            self.world.create_event(names.guts_man_g_defeated)
+        )
+        self.assertFalse(capsule.can_reach(state))
+
+        state.collect(
+            self.world.create_event(names.gamerizer_defeated)
+        )
+        self.assertFalse(capsule.can_reach(state))
+
+        state.collect(
+            self.world.create_event(names.hannya_ned_defeated)
+        )
+        self.assertTrue(capsule.can_reach(state))
+
+    def test_wily_capsule_requires_wild_coil(self) -> None:
+        state = CollectionState(self.multiworld)
+
+        state.collect(
+            self.world.create_event(names.guts_man_g_defeated)
+        )
+        state.collect(
+            self.world.create_event(names.gamerizer_defeated)
+        )
+        state.collect(
+            self.world.create_event(names.hannya_ned_defeated)
+        )
+
+        capsule = self.multiworld.get_location(
+            names.wily_capsule,
+            self.player,
+        )
+
+        self.assertFalse(capsule.can_reach(state))
+
+        state.collect(self.world.create_item(names.wild_coil))
 
         self.assertTrue(capsule.can_reach(state))
 
