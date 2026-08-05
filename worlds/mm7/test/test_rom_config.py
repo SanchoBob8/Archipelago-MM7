@@ -6,7 +6,7 @@ class TestDefaultRomConfig(MM7TestBase):
     def test_default_rom_config(self) -> None:
         config = get_rom_config(self.world)
 
-        self.assertEqual(MM7_ROM_CONFIG_SIZE, 17)
+        self.assertEqual(MM7_ROM_CONFIG_SIZE, 18)
         self.assertEqual(len(config), MM7_ROM_CONFIG_SIZE)
 
         self.assertEqual(
@@ -29,6 +29,7 @@ class TestDefaultRomConfig(MM7TestBase):
                 0,      # Skip Intro Stage
                 0,      # Skip Robot Museum
                 4,      # Robot Masters required for Robot Museum
+                0,      # Robot Master Access Codes
             ]),
         )
 
@@ -50,6 +51,7 @@ class TestCustomRomConfig(MM7TestBase):
         "skip_intro_stage": True,
         "skip_robot_museum": True,
         "robot_museum_robot_masters": 7,
+        "robot_master_access_codes": True,
     }
 
     def test_custom_rom_config_order(self) -> None:
@@ -77,5 +79,6 @@ class TestCustomRomConfig(MM7TestBase):
                 1,      # Skip Intro Stage
                 1,      # Skip Robot Museum
                 7,      # Robot Masters required for Robot Museum
+                1,      # Robot Master Access Codes
             ]),
         )

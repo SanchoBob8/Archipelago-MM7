@@ -33,7 +33,7 @@ from .locations import (
     location_name_to_id,
 )
 
-from .options import MegaMan7Options
+from .options import MegaMan7Options, mm7_option_groups
 from .rom import MM7ProcedurePatch, MM7Settings, patch_rom, get_rom_auth_token
 from .client import MM7SNIClient
 from .rules import (
@@ -46,6 +46,8 @@ from .rules import (
 
 class MegaMan7WebWorld(WebWorld):
     theme = "stone"
+    option_groups = mm7_option_groups
+
     tutorials = [
         Tutorial(
             tutorial_name="Setup Guide",

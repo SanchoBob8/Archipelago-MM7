@@ -36,6 +36,7 @@ hirom
 !AP_DRAW_WILY_NUMBER        = $7E1FB7
 !AP_EXIT_UNIT_USED          = $7E1FB8
 !AP_EXIT_UNIT_PAID_PENDING  = $7E1FB9
+!AP_ROBOT_MASTER_ACCESS     = $7E1FBA
 
 org $C0356D
     NOP
@@ -806,29 +807,48 @@ AP_StageSelectWilyCycleHook:
 AP_StageSelectConfirmHook:
     PHP
     SEP #$30
+    PHX
 
     ; Vanilla confirm path first checks whether the selected icon is Wily.
-    ; If this returns nonzero, A already contains the normal stage id.
+    ; For a normal stage, A contains the stage id from 1 through 8.
     JSR $380E
     BNE .normal_stage
 
     ; Wily box selected. If no AP Wily stage is available, cancel confirm.
     JSL AP_HasAnyAvailableWilyStage
-    BCC .cancel_wily_confirm
+    BCC .cancel_confirm
 
-    ; A valid AP Wily stage exists. Return its stage id in A and continue
-    ; at vanilla STA $0B73.
+    ; Return the selected Wily stage id in A and continue at vanilla
+    ; STA $0B73.
     JSL AP_GetSelectedWilyStageId
+    PLX
     PLP
     JML $C0350F
 
 .normal_stage:
-    ; Preserve vanilla behavior: store the normal stage id returned by $380E.
+    ; Preserve the normal stage id while checking the option and access bit.
+    TAX
+
+    ; When the option is disabled, all eight stages remain available.
+    LDA.l AP_ConfigRobotMasterAccessCodes
+    BEQ .allow_normal_stage
+
+    ; X is the stage id from 1 through 8. The existing boss mask table
+    ; has the corresponding Access Code bit at the same index.
+    LDA.l AP_BossBitMaskTable,x
+    AND.l !AP_ROBOT_MASTER_ACCESS
+    BEQ .cancel_confirm
+
+.allow_normal_stage:
+    ; Restore the stage id expected by vanilla STA $0B73.
+    TXA
+    PLX
     PLP
     JML $C0350F
 
-.cancel_wily_confirm:
+.cancel_confirm:
     ; Skip the confirm action entirely.
+    PLX
     PLP
     JML $C03521
 
@@ -1044,7 +1064,16 @@ AP_CheckItemReceive:
     JMP .give_wily_3_access
 +
 
+    ; $22-$29 = Robot Master Access Codes
+    CMP #$22
+    BCS +
     JMP .finish
++
+    CMP #$2A
+    BCC +
+    JMP .finish
++
+    JMP .give_robot_master_access
 
 .give_weapon_table:
     SEC
@@ -1166,6 +1195,18 @@ AP_CheckItemReceive:
     ORA #$04
     STA.l !AP_WILY_ACCESS
     JSR AP_EnsureVanillaWilyAvailable
+    JMP .finish
+
+.give_robot_master_access:
+    ; Convert receive ID $22-$29 into bit index 0-7.
+    SEC
+    SBC #$22
+    TAX
+
+    LDA.l AP_BitMaskTable,x
+    ORA.l !AP_ROBOT_MASTER_ACCESS
+    STA.l !AP_ROBOT_MASTER_ACCESS
+
     JMP .finish
 
 .finish:
@@ -2818,6 +2859,8 @@ AP_ConfigSkipRobotMuseum:
     db $00
 AP_ConfigRobotMuseumRobotMasters:
     db $04
+AP_ConfigRobotMasterAccessCodes:
+    db $00
 ; ============================================
 ; AP ROM auth token
 ;

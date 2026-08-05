@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from . import MegaMan7World
 
 MM7_ROM_CONFIG_OFFSET = 0x18FEA0
-MM7_ROM_CONFIG_SIZE = 17
+MM7_ROM_CONFIG_SIZE = 18
 
 MM7_USA_MD5 = "301d8c4f1b5de2cd10b68686b17b281a"
 MM7_KNOWN_MD5: set[str] = {
@@ -41,6 +41,7 @@ def get_rom_auth_token(world: "MegaMan7World") -> bytes:
     return token
 
 def get_rom_config(world: "MegaMan7World") -> bytes:
+    robot_master_access_codes = int(world.options.robot_master_access_codes.value)
     starting_lives = int(world.options.starting_lives.value)
     starting_bolts = int(world.options.starting_bolts.value)
     starting_e_tanks = int(world.options.starting_e_tanks.value)
@@ -80,6 +81,7 @@ def get_rom_config(world: "MegaMan7World") -> bytes:
         skip_intro_stage,
         skip_robot_museum,
         robot_museum_robot_masters,
+        robot_master_access_codes,
     ])
 
 class MM7Settings(settings.Group):
