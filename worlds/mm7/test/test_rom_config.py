@@ -1,3 +1,4 @@
+from .. import names
 from ..rom import MM7_ROM_CONFIG_SIZE, get_rom_config
 from .bases import MM7TestBase
 
@@ -6,7 +7,7 @@ class TestDefaultRomConfig(MM7TestBase):
     def test_default_rom_config(self) -> None:
         config = get_rom_config(self.world)
 
-        self.assertEqual(MM7_ROM_CONFIG_SIZE, 18)
+        self.assertEqual(MM7_ROM_CONFIG_SIZE, 19)
         self.assertEqual(len(config), MM7_ROM_CONFIG_SIZE)
 
         self.assertEqual(
@@ -29,7 +30,8 @@ class TestDefaultRomConfig(MM7TestBase):
                 0,      # Skip Intro Stage
                 0,      # Skip Robot Museum
                 4,      # Robot Masters required for Robot Museum
-                0,      # Robot Master Access Codes
+                0,      # Robot Master Access Codes disabled
+                0,      # No starting Robot Master Access Code
             ]),
         )
 
@@ -37,12 +39,12 @@ class TestDefaultRomConfig(MM7TestBase):
 class TestCustomRomConfig(MM7TestBase):
     options = {
         "starting_lives": 7,
-        "starting_bolts": 554,  # $022A
+        "starting_bolts": 554,
         "starting_e_tanks": 1,
         "starting_w_tanks": 2,
         "starting_s_tanks": 1,
         "paid_exit_unit": True,
-        "paid_exit_unit_cost": 513,  # $0201
+        "paid_exit_unit_cost": 513,
         "exit_unit_in_uncleared_stages": True,
         "wily_4_requirement_type": "weapons",
         "wily_4_wily_stages": 2,
@@ -55,8 +57,15 @@ class TestCustomRomConfig(MM7TestBase):
     }
 
     def test_custom_rom_config_order(self) -> None:
+        # generate_early() chooses this randomly. Override it so the expected
+        # ROM bytes are deterministic.
+        self.world.starting_robot_master_access_code = (
+            names.freeze_man_access
+        )
+
         config = get_rom_config(self.world)
 
+        self.assertEqual(MM7_ROM_CONFIG_SIZE, 19)
         self.assertEqual(len(config), MM7_ROM_CONFIG_SIZE)
 
         self.assertEqual(
@@ -79,6 +88,7 @@ class TestCustomRomConfig(MM7TestBase):
                 1,      # Skip Intro Stage
                 1,      # Skip Robot Museum
                 7,      # Robot Masters required for Robot Museum
-                1,      # Robot Master Access Codes
+                1,      # Robot Master Access Codes enabled
+                0x01,   # Freeze Man starting Access Code
             ]),
         )

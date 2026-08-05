@@ -209,17 +209,42 @@ def can_use_rush_search_and_exit(
 ) -> bool:
     return state.has(names.rush_search, player) and can_leave_stage_after_check(state, world, stage_clear_event)
 
+def can_farm_shop_bolts(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    # Cloud Man's stage provides a reliable, repeatable bolt farm.
+    return has_robot_master_stage_access(
+        state,
+        world,
+        names.cloud_man_defeated,
+    )
 
-def can_buy_shop_upgrade(state: CollectionState, player: int) -> bool:
-    # Current ROM/shop model:
-    # shop is accessible by default, but special shop upgrades require Hyper Bolt.
-    return state.has(names.hyper_bolt, player)
+def can_buy_shop_upgrade(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    return (
+        state.has(names.hyper_bolt, world.player)
+        and can_farm_shop_bolts(state, world)
+    )
 
 
 def can_get_rush_search_and_exit_or_buy_shop_upgrade(
-    state: CollectionState, player: int, world: "MegaMan7World", stage_clear_event: str
+    state: CollectionState,
+    player: int,
+    world: "MegaMan7World",
+    stage_clear_event: str,
 ) -> bool:
-    return can_use_rush_search_and_exit(state, player, world, stage_clear_event) or can_buy_shop_upgrade(state, player)
+    return (
+        can_use_rush_search_and_exit(
+            state,
+            player,
+            world,
+            stage_clear_event,
+        )
+        or can_buy_shop_upgrade(state, world)
+    )
 
 
 def can_defeat_boss(state: CollectionState, player: int, boss: str) -> bool:
@@ -408,12 +433,12 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
 
     # Rush Search can be checked in-stage or be bought after getting the hyper bolt.
     multiworld.get_location(names.rush_search_loc, player).access_rule = lambda state: (
-        can_leave_stage_after_check(state, world, names.freeze_man_defeated) or can_buy_shop_upgrade(state, player)
+        can_leave_stage_after_check(state, world, names.freeze_man_defeated) or can_buy_shop_upgrade(state, world)
     )
 
     # Rush Jet can be checked either in-stage with Thunder Bolt or be bought after getting the hyper bolt.
     multiworld.get_location(names.rush_jet_loc, player).access_rule = lambda state: (
-        can_buy_shop_upgrade(state, player)
+        can_buy_shop_upgrade(state, world)
         or (
             state.has(names.thunder_bolt, player) and can_leave_stage_after_check(state, world, names.junk_man_defeated)
         )

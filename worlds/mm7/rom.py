@@ -10,12 +10,13 @@ from typing import Optional, TYPE_CHECKING
 import settings
 import Utils
 from worlds.Files import APProcedurePatch, APTokenMixin, APTokenTypes
+from .items import robot_master_access_code_masks
 
 if TYPE_CHECKING:
     from . import MegaMan7World
 
 MM7_ROM_CONFIG_OFFSET = 0x18FEA0
-MM7_ROM_CONFIG_SIZE = 18
+MM7_ROM_CONFIG_SIZE = 19
 
 MM7_USA_MD5 = "301d8c4f1b5de2cd10b68686b17b281a"
 MM7_KNOWN_MD5: set[str] = {
@@ -62,6 +63,14 @@ def get_rom_config(world: "MegaMan7World") -> bytes:
     robot_museum_robot_masters = int(
         world.options.robot_museum_robot_masters.value
     )
+    starting_robot_master_access_mask = 0
+
+    if world.starting_robot_master_access_code is not None:
+        starting_robot_master_access_mask = (
+            robot_master_access_code_masks[
+                world.starting_robot_master_access_code
+            ]
+        )
 
     return bytes([
         starting_lives,
@@ -82,6 +91,7 @@ def get_rom_config(world: "MegaMan7World") -> bytes:
         skip_robot_museum,
         robot_museum_robot_masters,
         robot_master_access_codes,
+        starting_robot_master_access_mask,
     ])
 
 class MM7Settings(settings.Group):

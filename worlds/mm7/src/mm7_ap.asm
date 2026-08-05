@@ -145,7 +145,7 @@ org $C00DCB
 ; ============================================
 
 org $C038CC
-    JSL AP_StageSelectMedalHook
+    JSL AP_StageSelectPortraitHook
     NOP
     NOP
     NOP
@@ -720,38 +720,105 @@ AP_MainLoopHook:
 
 org $C07EC0
 
-AP_StageSelectMedalHook:
+AP_StageSelectPortraitHook:
     PHP
     SEP #$30
     PHX
 
-    ; X is one of $10,$0E,$0C,$0A,$08,$06,$04,$02.
-    ; Convert weapon offset into table index: X / 2.
+    ; Original X values are $10,$0E,$0C,$0A,$08,$06,$04,$02.
+    ; Convert them to boss index 8 through 1.
     TXA
     LSR
     TAX
 
+    ; Cleared bosses retain the vanilla darkened portrait.
     LDA.l AP_StageSelectBitMaskTable,x
     AND.l !AP_BOSS_FLAGS
-    BEQ .not_cleared
+    BNE .cleared
 
-.cleared:
+    ; Access Codes disabled: show the normal portrait.
+    LDA.l AP_ConfigRobotMasterAccessCodes
+    BEQ .normal
+
+    ; Access Code owned: show the normal portrait.
+    LDA.l AP_StageSelectBitMaskTable,x
+    AND.l !AP_ROBOT_MASTER_ACCESS
+    BNE .normal
+
+.locked:
+    ; Restore the original X expected by the portrait-position table.
     PLX
     PLP
 
-    ; Original cleared behavior:
-    ; PHX
-    ; JSR $3902
-    ; PLX
+    PHX
+    JSR AP_DrawLockedStagePortrait
+    PLX
+    RTL
+
+.cleared:
+    ; Restore the original X and use the vanilla cleared portrait routine.
+    PLX
+    PLP
+
     PHX
     JSR $3902
     PLX
     RTL
 
-.not_cleared:
+.normal:
     PLX
     PLP
     RTL
+
+AP_DrawLockedStagePortrait:
+    ; This duplicates vanilla $C03902, but fills the portrait with $B03D
+    ; instead of the cleared-stage value $200E.
+    REP #$30
+
+    ; Get the tilemap-buffer offset for the portrait represented by X.
+    LDA $93FD,X
+    STA $10
+
+    STZ $14
+
+    ; Set DB to $7F for writes to the stage-select tilemap buffer.
+    ; The final PLB restores DB to $80, matching vanilla $C03902.
+    PEA $807F
+    PLB
+
+.row_loop:
+    LDA $10
+    CLC
+    ADC $14
+    TAX
+
+    LDY #$0006
+
+    ; Locked portrait overlay:
+    ; tile $03D, palette 4, priority set, vertical flip set.
+    LDA #$B03D
+
+.column_loop:
+    STA $C000,X
+    INX
+    INX
+    DEY
+    BNE .column_loop
+
+    ; Advance one 32-tile tilemap row:
+    ; 32 entries × 2 bytes = $40 bytes.
+    LDA $14
+    CLC
+    ADC #$0040
+    STA $14
+
+    ; Six rows × $40 bytes = $0180.
+    CMP #$0180
+    BCC .row_loop
+
+    PLB
+    SEP #$30
+    RTS
 
 AP_StageSelectWilyCycleHook:
     PHP
@@ -980,6 +1047,11 @@ AP_ClearRuntime:
     INX
     CPX #$20
     BNE .clear_loop
+
+    ; Make the precollected starting stage available before the first
+    ; stage-select tilemap is constructed.
+    LDA.l AP_ConfigStartingRobotMasterAccess
+    STA.l !AP_ROBOT_MASTER_ACCESS
 
     PLX
     PLP
@@ -2900,6 +2972,8 @@ AP_ConfigRobotMuseumRobotMasters:
     db $04
 AP_ConfigRobotMasterAccessCodes:
     db $01
+AP_ConfigStartingRobotMasterAccess:
+    db $00
 ; ============================================
 ; AP ROM auth token
 ;

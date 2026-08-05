@@ -221,6 +221,11 @@ robot_master_access_codes = (
     names.spring_man_access,
 )
 
+robot_master_access_code_masks = {
+    item_name: 1 << index
+    for index, item_name in enumerate(robot_master_access_codes)
+}
+
 robot_master_access_code_items: Set[str] = set(
     robot_master_access_codes
 )
