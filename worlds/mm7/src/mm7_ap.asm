@@ -689,6 +689,20 @@ org $C03504
     NOP
 
 ; ============================================
+; Normal Robot Master stage confirmation gate.
+;
+; Original:
+;   C034DF 8D 73 0B    STA $0B73
+;   C034E2 A9 0A       LDA #$0A
+;
+; A contains the selected stage ID.
+; ============================================
+
+org $C034DF
+    JML AP_NormalStageEntryGateHook
+    NOP
+
+; ============================================
 ; Small C0-bank helper routines
 ;
 ; These stay in bank C0 because they call vanilla RTS routines using JSR.
@@ -807,50 +821,75 @@ AP_StageSelectWilyCycleHook:
 AP_StageSelectConfirmHook:
     PHP
     SEP #$30
-    PHX
 
-    ; Vanilla confirm path first checks whether the selected icon is Wily.
-    ; For a normal stage, A contains the stage id from 1 through 8.
+    ; Determine whether the selected icon is the Wily box.
     JSR $380E
     BNE .normal_stage
 
-    ; Wily box selected. If no AP Wily stage is available, cancel confirm.
+    ; Wily box selected. Require at least one available AP Wily stage.
     JSL AP_HasAnyAvailableWilyStage
-    BCC .cancel_confirm
+    BCC .cancel_wily_confirm
 
-    ; Return the selected Wily stage id in A and continue at vanilla
-    ; STA $0B73.
+    ; Return the selected Wily stage ID in A.
     JSL AP_GetSelectedWilyStageId
-    PLX
+
     PLP
     JML $C0350F
 
 .normal_stage:
-    ; Preserve the normal stage id while checking the option and access bit.
-    TAX
-
-    ; When the option is disabled, all eight stages remain available.
-    LDA.l AP_ConfigRobotMasterAccessCodes
-    BEQ .allow_normal_stage
-
-    ; X is the stage id from 1 through 8. The existing boss mask table
-    ; has the corresponding Access Code bit at the same index.
-    LDA.l AP_BossBitMaskTable,x
-    AND.l !AP_ROBOT_MASTER_ACCESS
-    BEQ .cancel_confirm
-
-.allow_normal_stage:
-    ; Restore the stage id expected by vanilla STA $0B73.
-    TXA
-    PLX
     PLP
     JML $C0350F
 
-.cancel_confirm:
-    ; Skip the confirm action entirely.
-    PLX
+.cancel_wily_confirm:
     PLP
     JML $C03521
+
+AP_NormalStageEntryGateHook:
+    PHP
+    SEP #$30
+    PHX
+
+    ; A contains the selected stage ID.
+    TAX
+
+    ; Only Robot Master stage IDs 1-8 use Access Codes.
+    ; Allow anything outside that range defensively.
+    CPX #$01
+    BCC .allow_stage
+
+    CPX #$09
+    BCS .allow_stage
+
+    ; Preserve vanilla behavior when the option is disabled.
+    LDA.l AP_ConfigRobotMasterAccessCodes
+    BEQ .allow_stage
+
+    ; Require the Access Code bit matching stage ID 1-8.
+    LDA.l AP_BossBitMaskTable,x
+    AND.l !AP_ROBOT_MASTER_ACCESS
+    BEQ .deny_stage
+
+.allow_stage:
+    ; Restore the instructions overwritten at $C034DF.
+    TXA
+    STA.l $7E0B73
+
+    LDA #$0A
+
+    PLX
+    PLP
+
+    ; Continue at:
+    ;   C034E4  STA $01
+    JML $C034E4
+
+.deny_stage:
+    PLX
+    PLP
+
+    ; Same destination as the original BEQ at $C034DD.
+    ; This performs the normal stage-select cleanup without entering.
+    JML $C034F1
 
 AP_PostOAMDrawHook:
     PHP
@@ -2854,13 +2893,13 @@ AP_ConfigWily4RobotMasters:
 AP_ConfigWily4Weapons:
     db $08
 AP_ConfigSkipIntroStage:
-    db $00
+    db $01
 AP_ConfigSkipRobotMuseum:
     db $00
 AP_ConfigRobotMuseumRobotMasters:
     db $04
 AP_ConfigRobotMasterAccessCodes:
-    db $00
+    db $01
 ; ============================================
 ; AP ROM auth token
 ;
