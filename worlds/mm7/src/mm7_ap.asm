@@ -37,6 +37,7 @@ hirom
 !AP_EXIT_UNIT_USED          = $7E1FB8
 !AP_EXIT_UNIT_PAID_PENDING  = $7E1FB9
 !AP_ROBOT_MASTER_ACCESS     = $7E1FBA
+!AP_STAGE_SELECT_DIRTY      = $7E1FBB
 
 org $C0356D
     NOP
@@ -1000,6 +1001,26 @@ AP_PostOAMDrawHook:
     LDA #$E0
     STA $08FD
 
+    ; Rebuild the portrait overlay after receiving a new Access Code.
+    LDA.l !AP_STAGE_SELECT_DIRTY
+    BEQ .overlay_current
+
+    ; $C038B7 clears the overlay tilemap, redraws all locked/cleared
+    ; portraits, and queues the tilemap for upload.
+    PHB
+    PHX
+    PHY
+
+    JSR $38B7
+
+    PLY
+    PLX
+    PLB
+
+    LDA #$00
+    STA.l !AP_STAGE_SELECT_DIRTY
+
+.overlay_current:
     ; Only draw if stage-select input hook requested it this frame.
     LDA.l !AP_DRAW_WILY_NUMBER
     BEQ .done
@@ -1345,9 +1366,22 @@ AP_CheckItemReceive:
     SBC #$22
     TAX
 
+    ; Save the corresponding Access Code bit.
     LDA.l AP_BitMaskTable,x
+    STA.l !AP_TEMP
+
+    ; A duplicate code does not change anything and needs no redraw.
+    AND.l !AP_ROBOT_MASTER_ACCESS
+    BNE .finish
+
+    ; Add the newly received Access Code.
+    LDA.l !AP_TEMP
     ORA.l !AP_ROBOT_MASTER_ACCESS
     STA.l !AP_ROBOT_MASTER_ACCESS
+
+    ; Request a stage-select overlay rebuild.
+    LDA #$01
+    STA.l !AP_STAGE_SELECT_DIRTY
 
     JMP .finish
 
