@@ -33,6 +33,17 @@ BOSS_ITEM_LOCATION_TABLE = {
     names.turbo_man_defeated: names.turbo_man_defeated_item,
 }
 
+ROBOT_MASTER_ACCESS_CODE_TABLE = {
+    names.freeze_man_defeated: names.freeze_man_access,
+    names.cloud_man_defeated: names.cloud_man_access,
+    names.junk_man_defeated: names.junk_man_access,
+    names.turbo_man_defeated: names.turbo_man_access,
+    names.slash_man_defeated: names.slash_man_access,
+    names.shade_man_defeated: names.shade_man_access,
+    names.burst_man_defeated: names.burst_man_access,
+    names.spring_man_defeated: names.spring_man_access,
+}
+
 
 WEAKNESS_TABLE = {
     names.burst_man_defeated: [names.freeze_cracker, names.scorch_wheel],
@@ -49,6 +60,23 @@ WEAKNESS_TABLE = {
     names.hannya_ned_defeated: [names.slash_claw, names.noise_crush],
     names.wily_capsule: [names.wild_coil]
 }
+
+def has_robot_master_stage_access(
+    state: CollectionState,
+    world: "MegaMan7World",
+    stage_clear_event: str,
+) -> bool:
+    if not world.options.robot_master_access_codes.value:
+        return True
+
+    access_code = ROBOT_MASTER_ACCESS_CODE_TABLE.get(
+        stage_clear_event
+    )
+
+    return (
+        access_code is not None
+        and state.has(access_code, world.player)
+    )
 
 def meets_boss_weakness_logic(
     state: CollectionState,
@@ -181,17 +209,42 @@ def can_use_rush_search_and_exit(
 ) -> bool:
     return state.has(names.rush_search, player) and can_leave_stage_after_check(state, world, stage_clear_event)
 
+def can_farm_shop_bolts(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    # Cloud Man's stage provides a reliable, repeatable bolt farm.
+    return has_robot_master_stage_access(
+        state,
+        world,
+        names.cloud_man_defeated,
+    )
 
-def can_buy_shop_upgrade(state: CollectionState, player: int) -> bool:
-    # Current ROM/shop model:
-    # shop is accessible by default, but special shop upgrades require Hyper Bolt.
-    return state.has(names.hyper_bolt, player)
+def can_buy_shop_upgrade(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    return (
+        state.has(names.hyper_bolt, world.player)
+        and can_farm_shop_bolts(state, world)
+    )
 
 
 def can_get_rush_search_and_exit_or_buy_shop_upgrade(
-    state: CollectionState, player: int, world: "MegaMan7World", stage_clear_event: str
+    state: CollectionState,
+    player: int,
+    world: "MegaMan7World",
+    stage_clear_event: str,
 ) -> bool:
-    return can_use_rush_search_and_exit(state, player, world, stage_clear_event) or can_buy_shop_upgrade(state, player)
+    return (
+        can_use_rush_search_and_exit(
+            state,
+            player,
+            world,
+            stage_clear_event,
+        )
+        or can_buy_shop_upgrade(state, world)
+    )
 
 
 def can_defeat_boss(state: CollectionState, player: int, boss: str) -> bool:
@@ -242,34 +295,43 @@ def can_leave_stage_after_check(
 ) -> bool:
     player = world.player
 
+    if not has_robot_master_stage_access(
+        state,
+        world,
+        stage_clear_event,
+    ):
+        return False
+
     if not world.options.logic_boss_weakness.value:
         return True
 
-    return can_defeat_boss(state, player, stage_clear_event) or can_use_exit_unit_after_check(
-        state, world, stage_clear_event
+    return (
+        can_defeat_boss(state, player, stage_clear_event)
+        or can_use_exit_unit_after_check(
+            state,
+            world,
+            stage_clear_event,
+        )
     )
 
 
 def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
-    # ============================================================
-    # Main boss locations
-    #
-    # Current MVP ROM:
-    # - All 8 Robot Master stages are open from the start.
-    # - If logic_boss_weakness is disabled, bosses are open.
-    # - If enabled, boss medal and boss item location require a weakness.
-    # ============================================================
-
     for boss, item_location in BOSS_ITEM_LOCATION_TABLE.items():
-        if world.options.logic_boss_weakness.value:
-            multiworld.get_location(boss, player).access_rule = lambda state, b=boss: can_defeat_boss(state, player, b)
+        boss_rule = (
+            lambda state, b=boss:
+            has_robot_master_stage_access(state, world, b)
+            and meets_boss_weakness_logic(state, world, b)
+        )
 
-            multiworld.get_location(item_location, player).access_rule = lambda state, b=boss: can_defeat_boss(
-                state, player, b
-            )
-        else:
-            multiworld.get_location(boss, player).access_rule = always_accessible
-            multiworld.get_location(item_location, player).access_rule = always_accessible
+        multiworld.get_location(
+            boss,
+            player,
+        ).access_rule = boss_rule
+
+        multiworld.get_location(
+            item_location,
+            player,
+        ).access_rule = boss_rule
 
     # ============================================================
     # Intro Stage / Rush Coil
@@ -371,12 +433,12 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
 
     # Rush Search can be checked in-stage or be bought after getting the hyper bolt.
     multiworld.get_location(names.rush_search_loc, player).access_rule = lambda state: (
-        can_leave_stage_after_check(state, world, names.freeze_man_defeated) or can_buy_shop_upgrade(state, player)
+        can_leave_stage_after_check(state, world, names.freeze_man_defeated) or can_buy_shop_upgrade(state, world)
     )
 
     # Rush Jet can be checked either in-stage with Thunder Bolt or be bought after getting the hyper bolt.
     multiworld.get_location(names.rush_jet_loc, player).access_rule = lambda state: (
-        can_buy_shop_upgrade(state, player)
+        can_buy_shop_upgrade(state, world)
         or (
             state.has(names.thunder_bolt, player) and can_leave_stage_after_check(state, world, names.junk_man_defeated)
         )

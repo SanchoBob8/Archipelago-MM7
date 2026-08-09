@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from Options import Choice, DeathLink, PerGameCommonOptions, Range, Toggle
+from Options import Choice, DeathLink, OptionGroup, PerGameCommonOptions, Range, Toggle
 
 
 class LogicBossWeakness(Toggle):
@@ -10,6 +10,16 @@ class LogicBossWeakness(Toggle):
     display_name = "Boss Weakness Logic"
     default = False
 
+class RobotMasterAccessCodes(Toggle):
+    """
+    Locks each Robot Master stage behind its corresponding Access Code.
+
+    One random Robot Master Access Code is granted at the start so that
+    at least one stage is immediately available.
+    """
+
+    display_name = "Robot Master Access Codes"
+    default = False
 
 class StartingLives(Range):
     """
@@ -163,21 +173,83 @@ class RobotMastersRequiredForRobotMuseum(Range):
 
 @dataclass
 class MegaMan7Options(PerGameCommonOptions):
-    death_link: DeathLink
+    robot_master_access_codes: RobotMasterAccessCodes
     logic_boss_weakness: LogicBossWeakness
+
+    skip_intro_stage: SkipIntroStage
+    skip_robot_museum: SkipRobotMuseum
+    robot_museum_robot_masters: RobotMastersRequiredForRobotMuseum
+
+    exit_unit_in_uncleared_stages: ExitUnitInUnclearedStages
+    paid_exit_unit: PaidExitUnit
+    paid_exit_unit_cost: PaidExitUnitCost
+    paid_exit_unit_in_logic: PaidExitUnitInLogic
+
+    wily_4_requirement_type: Wily4RequirementType
+    wily_4_wily_stages: Wily4WilyStages
+    wily_4_robot_masters: Wily4RobotMasters
+    wily_4_weapons: Wily4Weapons
+
     starting_lives: StartingLives
     starting_bolts: StartingBolts
     starting_e_tanks: StartingETanks
     starting_w_tanks: StartingWTanks
     starting_s_tanks: StartingSTanks
-    exit_unit_in_uncleared_stages: ExitUnitInUnclearedStages
-    paid_exit_unit: PaidExitUnit
-    paid_exit_unit_cost: PaidExitUnitCost
-    paid_exit_unit_in_logic: PaidExitUnitInLogic
-    wily_4_requirement_type: Wily4RequirementType
-    wily_4_wily_stages: Wily4WilyStages
-    wily_4_robot_masters: Wily4RobotMasters
-    wily_4_weapons: Wily4Weapons
-    skip_intro_stage: SkipIntroStage
-    skip_robot_museum: SkipRobotMuseum
-    robot_museum_robot_masters: RobotMastersRequiredForRobotMuseum
+
+    death_link: DeathLink
+
+mm7_option_groups = [
+    OptionGroup(
+        "Progression and Logic",
+        [
+            RobotMasterAccessCodes,
+            LogicBossWeakness,
+        ],
+    ),
+    OptionGroup(
+        "Stage Options",
+        [
+            SkipIntroStage,
+            SkipRobotMuseum,
+            RobotMastersRequiredForRobotMuseum,
+        ],
+    ),
+    OptionGroup(
+        "Exit Unit Options",
+        [
+            ExitUnitInUnclearedStages,
+            PaidExitUnit,
+            PaidExitUnitCost,
+            PaidExitUnitInLogic,
+        ],
+        start_collapsed=True,
+    ),
+    OptionGroup(
+        "Wily 4 Options",
+        [
+            Wily4RequirementType,
+            Wily4WilyStages,
+            Wily4RobotMasters,
+            Wily4Weapons,
+        ],
+        start_collapsed=True,
+    ),
+    OptionGroup(
+        "Starting Resources",
+        [
+            StartingLives,
+            StartingBolts,
+            StartingETanks,
+            StartingWTanks,
+            StartingSTanks,
+        ],
+        start_collapsed=True,
+    ),
+    OptionGroup(
+        "Multiplayer Options",
+        [
+            DeathLink,
+        ],
+        start_collapsed=True,
+    ),
+]

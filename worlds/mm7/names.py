@@ -18,6 +18,18 @@ super_adapter = "Super Adapter"
 proto_shield = "Proto Shield"
 
 # ============================================================
+# Robot Master access items
+# ============================================================
+freeze_man_access = "Freeze Man Access Code"
+cloud_man_access = "Cloud Man Access Code"
+junk_man_access = "Junk Man Access Code"
+turbo_man_access = "Turbo Man Access Code"
+slash_man_access = "Slash Man Access Code"
+shade_man_access = "Shade Man Access Code"
+burst_man_access = "Burst Man Access Code"
+spring_man_access = "Spring Man Access Code"
+
+# ============================================================
 # Rush plates
 # ============================================================
 rush_r_plate = "Rush R Plate"

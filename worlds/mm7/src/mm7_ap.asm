@@ -36,6 +36,13 @@ hirom
 !AP_DRAW_WILY_NUMBER        = $7E1FB7
 !AP_EXIT_UNIT_USED          = $7E1FB8
 !AP_EXIT_UNIT_PAID_PENDING  = $7E1FB9
+!AP_ROBOT_MASTER_ACCESS     = $7E1FBA
+!AP_STAGE_SELECT_DIRTY      = $7E1FBB
+
+org $C034D0
+    JSL AP_StageSelectNormalFrameHook
+    NOP
+    NOP
 
 org $C0356D
     NOP
@@ -144,7 +151,7 @@ org $C00DCB
 ; ============================================
 
 org $C038CC
-    JSL AP_StageSelectMedalHook
+    JSL AP_StageSelectPortraitHook
     NOP
     NOP
     NOP
@@ -688,6 +695,20 @@ org $C03504
     NOP
 
 ; ============================================
+; Normal Robot Master stage confirmation gate.
+;
+; Original:
+;   C034DF 8D 73 0B    STA $0B73
+;   C034E2 A9 0A       LDA #$0A
+;
+; A contains the selected stage ID.
+; ============================================
+
+org $C034DF
+    JML AP_NormalStageEntryGateHook
+    NOP
+
+; ============================================
 ; Small C0-bank helper routines
 ;
 ; These stay in bank C0 because they call vanilla RTS routines using JSR.
@@ -703,49 +724,299 @@ AP_MainLoopHook:
     JSL AP_UpdateVanillaWilyAvailability
     RTL
 
-org $C07EC0
+AP_StageSelectNormalFrameHook:
+    JSR $381C
 
-AP_StageSelectMedalHook:
+    JSR AP_ProcessStageSelectRefresh
+
+    LDA $00A6
+    RTL
+
+AP_NormalStageEntryGateHook:
     PHP
     SEP #$30
     PHX
 
-    ; X is one of $10,$0E,$0C,$0A,$08,$06,$04,$02.
-    ; Convert weapon offset into table index: X / 2.
+    ; A contains the selected stage ID.
+    TAX
+
+    ; Only Robot Master stage IDs 1-8 use Access Codes.
+    CPX #$01
+    BCC .allow_stage
+
+    CPX #$09
+    BCS .allow_stage
+
+    ; Preserve vanilla behavior when the option is disabled.
+    LDA.l AP_ConfigRobotMasterAccessCodes
+    BEQ .allow_stage
+
+    ; Require the Access Code bit matching stage ID 1-8.
+    LDA.l AP_BossBitMaskTable,x
+    AND.l !AP_ROBOT_MASTER_ACCESS
+    BEQ .deny_stage
+
+.allow_stage:
+    ; Restore:
+    ;   C034DF  STA $0B73
+    ;   C034E2  LDA #$0A
+    TXA
+    STA.l $7E0B73
+
+    LDA #$0A
+
+    PLX
+    PLP
+    JML $C034E4
+
+.deny_stage:
+    PLX
+    PLP
+    JML $C034F1
+
+AP_StageSelectPortraitHook:
+    PHP
+    SEP #$30
+    PHX
+
+    ; Original X values are $10,$0E,$0C,$0A,$08,$06,$04,$02.
+    ; Convert them to boss index 8 through 1.
     TXA
     LSR
     TAX
 
+    ; Cleared bosses retain the vanilla darkened portrait.
     LDA.l AP_StageSelectBitMaskTable,x
     AND.l !AP_BOSS_FLAGS
-    BEQ .not_cleared
+    BNE .cleared
 
-.cleared:
+    ; Access Codes disabled: show the normal portrait.
+    LDA.l AP_ConfigRobotMasterAccessCodes
+    BEQ .normal
+
+    ; Access Code owned: show the normal portrait.
+    LDA.l AP_StageSelectBitMaskTable,x
+    AND.l !AP_ROBOT_MASTER_ACCESS
+    BNE .normal
+
+.locked:
+    ; Restore the original X expected by the portrait-position table.
     PLX
     PLP
 
-    ; Original cleared behavior:
-    ; PHX
-    ; JSR $3902
-    ; PLX
+    PHX
+    JSR AP_DrawLockedStagePortrait
+    PLX
+    RTL
+
+.cleared:
+    ; Restore the original X and use the vanilla cleared portrait routine.
+    PLX
+    PLP
+
     PHX
     JSR $3902
     PLX
     RTL
 
-.not_cleared:
+.normal:
     PLX
     PLP
     RTL
+
+AP_DrawLockedStagePortrait:
+    ; This duplicates vanilla $C03902, but fills the portrait with $B03D
+    ; instead of the cleared-stage value $200E.
+    REP #$30
+
+    ; Get the tilemap-buffer offset for the portrait represented by X.
+    LDA $93FD,X
+    STA $10
+
+    STZ $14
+
+    ; Set DB to $7F for writes to the stage-select tilemap buffer.
+    ; The final PLB restores DB to $80, matching vanilla $C03902.
+    PEA $807F
+    PLB
+
+.row_loop:
+    LDA $10
+    CLC
+    ADC $14
+    TAX
+
+    LDY #$0006
+
+    ; Locked portrait overlay:
+    ; tile $03D, palette 4, priority set, vertical flip set.
+    LDA #$B03D
+
+.column_loop:
+    STA $C000,X
+    INX
+    INX
+    DEY
+    BNE .column_loop
+
+    ; Advance one 32-tile tilemap row:
+    ; 32 entries × 2 bytes = $40 bytes.
+    LDA $14
+    CLC
+    ADC #$0040
+    STA $14
+
+    ; Six rows × $40 bytes = $0180.
+    CMP #$0180
+    BCC .row_loop
+
+    PLB
+    SEP #$30
+    RTS
+
+AP_ProcessStageSelectRefresh:
+    PHP
+    SEP #$30
+    PHX
+    PHY
+
+    LDA.l !AP_STAGE_SELECT_DIRTY
+    BEQ .done
+
+    ; Each bit corresponds to one Robot Master:
+    ; bit 0 -> X=$02
+    ; bit 1 -> X=$04
+    ; ...
+    ; bit 7 -> X=$10
+    LDX #$00
+
+.check_next:
+    LDA.l AP_BitMaskTable,x
+    AND.l !AP_STAGE_SELECT_DIRTY
+    BEQ .next
+
+    ; Preserve the bit index while converting it to the X value used
+    ; by the vanilla portrait-position table.
+    PHX
+
+    TXA
+    INC
+    ASL
+    TAX
+
+    JSR AP_ClearUnlockedStagePortrait
+
+    PLX
+
+.next:
+    INX
+    CPX #$08
+    BCC .check_next
+
+    ; We modified $7FC000 directly. Queue that tilemap for upload
+    ; without clearing/reconstructing it like $38B7 does.
+    JSR AP_QueueStageSelectOverlayUpload
+
+    LDA #$00
+    STA.l !AP_STAGE_SELECT_DIRTY
+
+.done:
+    PLY
+    PLX
+    PLP
+    RTS
+
+AP_ClearUnlockedStagePortrait:
+    ; X = vanilla portrait table index:
+    ; $02,$04,$06,$08,$0A,$0C,$0E,$10
+    ;
+    ; This is the inverse of AP_DrawLockedStagePortrait:
+    ; instead of filling the 6x6 rectangle with $B03D,
+    ; clear only that rectangle back to $0000.
+
+    REP #$30
+
+    ; Vanilla $C03902 reads $93FD,X with DB=$80.
+    ; Use a long address here so we do not depend on DB.
+    LDA.l $8093FD,x
+    TAX
+
+    LDY #$0006
+
+.row_loop:
+    LDA #$0000
+
+    ; Six tilemap entries in this portrait row.
+    STA.l $7FC000,x
+    STA.l $7FC002,x
+    STA.l $7FC004,x
+    STA.l $7FC006,x
+    STA.l $7FC008,x
+    STA.l $7FC00A,x
+
+    ; Next tilemap row = +$40 bytes.
+    TXA
+    CLC
+    ADC #$0040
+    TAX
+
+    DEY
+    BNE .row_loop
+
+    SEP #$30
+    RTS
+
+AP_QueueStageSelectOverlayUpload:
+    PHP
+    SEP #$30
+    PHX
+
+    ; X = current upload queue offset.
+    ; LDX has no 24-bit long addressing mode, so load through A.
+    LDA.l $7E00CB
+    TAX
+
+    REP #$20
+
+    ; Transfer size.
+    LDA #$0800
+    STA.l $7E0501,x
+    STA.l $7E0503,x
+
+    ; Source address = $7F:C000.
+    LDA #$C000
+    STA.l $7E0505,x
+
+    SEP #$20
+
+    LDA #$80
+    STA.l $7E0500,x
+
+    LDA #$7F
+    STA.l $7E0507,x
+
+    ; Advance upload queue by one 8-byte entry.
+    TXA
+    CLC
+    ADC #$08
+    STA.l $7E00CB
+
+    PLX
+    PLP
+    RTS
+
+assert pc() <= $C07EC0
+
+org $C07EC0
 
 AP_StageSelectWilyCycleHook:
     PHP
     SEP #$30
 
-    ; Preserve replaced vanilla behavior.
     JSR $381C
 
-    ; Only handle/display overlay if cursor is on the Wily box.
+    JSR AP_ProcessStageSelectRefresh
+
     JSR $380E
     BNE .not_wily_box
 
@@ -806,30 +1077,59 @@ AP_StageSelectWilyCycleHook:
 AP_StageSelectConfirmHook:
     PHP
     SEP #$30
+    PHX
 
-    ; Vanilla confirm path first checks whether the selected icon is Wily.
-    ; If this returns nonzero, A already contains the normal stage id.
+    ; Determine whether the selected icon is the Wily box.
+    ; A is 0 for Wily, or the normal stage ID for Robot Masters.
     JSR $380E
     BNE .normal_stage
 
-    ; Wily box selected. If no AP Wily stage is available, cancel confirm.
+    ; Wily box selected. Require at least one available AP Wily stage.
     JSL AP_HasAnyAvailableWilyStage
-    BCC .cancel_wily_confirm
+    BCC .cancel_confirm
 
-    ; A valid AP Wily stage exists. Return its stage id in A and continue
-    ; at vanilla STA $0B73.
+    ; Return the selected Wily stage ID in A.
     JSL AP_GetSelectedWilyStageId
+
+    PLX
     PLP
     JML $C0350F
 
 .normal_stage:
-    ; Preserve vanilla behavior: store the normal stage id returned by $380E.
+    ; Preserve the normal Robot Master stage ID.
+    TAX
+
+    ; Robot Master stage IDs are 1 through 8.
+    ; Anything outside that range is allowed defensively.
+    CPX #$01
+    BCC .allow_normal_stage
+
+    CPX #$09
+    BCS .allow_normal_stage
+
+    ; Option disabled: preserve vanilla behavior.
+    LDA.l AP_ConfigRobotMasterAccessCodes
+    BEQ .allow_normal_stage
+
+    ; Require the Access Code bit corresponding to the stage ID.
+    LDA.l AP_BossBitMaskTable,x
+    AND.l !AP_ROBOT_MASTER_ACCESS
+    BEQ .cancel_confirm
+
+.allow_normal_stage:
+    ; Restore the selected stage ID for vanilla:
+    ;   C0350F  STA $0B73
+    TXA
+
+    PLX
     PLP
     JML $C0350F
 
-.cancel_wily_confirm:
-    ; Skip the confirm action entirely.
+.cancel_confirm:
+    PLX
     PLP
+
+    ; Return through the normal no-confirm path.
     JML $C03521
 
 AP_PostOAMDrawHook:
@@ -843,7 +1143,7 @@ AP_PostOAMDrawHook:
     LDA #$E0
     STA $08FD
 
-    ; Only draw if stage-select input hook requested it this frame.
+    ; Only draw if stage-select input requested it this frame.
     LDA.l !AP_DRAW_WILY_NUMBER
     BEQ .done
 
@@ -921,6 +1221,11 @@ AP_ClearRuntime:
     INX
     CPX #$20
     BNE .clear_loop
+
+    ; Make the precollected starting stage available before the first
+    ; stage-select tilemap is constructed.
+    LDA.l AP_ConfigStartingRobotMasterAccess
+    STA.l !AP_ROBOT_MASTER_ACCESS
 
     PLX
     PLP
@@ -1044,7 +1349,16 @@ AP_CheckItemReceive:
     JMP .give_wily_3_access
 +
 
+    ; $22-$29 = Robot Master Access Codes
+    CMP #$22
+    BCS +
     JMP .finish
++
+    CMP #$2A
+    BCC +
+    JMP .finish
++
+    JMP .give_robot_master_access
 
 .give_weapon_table:
     SEC
@@ -1166,6 +1480,34 @@ AP_CheckItemReceive:
     ORA #$04
     STA.l !AP_WILY_ACCESS
     JSR AP_EnsureVanillaWilyAvailable
+    JMP .finish
+
+.give_robot_master_access:
+    ; Convert receive ID $22-$29 into bit index 0-7.
+    SEC
+    SBC #$22
+    TAX
+
+    ; Save the corresponding Access Code bit.
+    LDA.l AP_BitMaskTable,x
+    STA.l !AP_TEMP
+
+    ; A duplicate code does not change anything and needs no redraw.
+    AND.l !AP_ROBOT_MASTER_ACCESS
+    BNE .finish
+
+    ; Add the newly received Access Code.
+    LDA.l !AP_TEMP
+    ORA.l !AP_ROBOT_MASTER_ACCESS
+    STA.l !AP_ROBOT_MASTER_ACCESS
+
+    ; Remember exactly which portrait(s) need to be refreshed.
+    ; Use a bitmask so multiple Access Codes received before the
+    ; next refresh are not lost.
+    LDA.l !AP_TEMP
+    ORA.l !AP_STAGE_SELECT_DIRTY
+    STA.l !AP_STAGE_SELECT_DIRTY
+
     JMP .finish
 
 .finish:
@@ -2813,11 +3155,15 @@ AP_ConfigWily4RobotMasters:
 AP_ConfigWily4Weapons:
     db $08
 AP_ConfigSkipIntroStage:
-    db $00
+    db $01
 AP_ConfigSkipRobotMuseum:
     db $00
 AP_ConfigRobotMuseumRobotMasters:
     db $04
+AP_ConfigRobotMasterAccessCodes:
+    db $01
+AP_ConfigStartingRobotMasterAccess:
+    db $00
 ; ============================================
 ; AP ROM auth token
 ;
