@@ -38,6 +38,27 @@ hirom
 !AP_EXIT_UNIT_PAID_PENDING  = $7E1FB9
 !AP_ROBOT_MASTER_ACCESS     = $7E1FBA
 !AP_STAGE_SELECT_DIRTY      = $7E1FBB
+!AP_SELECTED_CHECKPOINT     = $7E1FBC
+!AP_LAST_STAGE_SELECT_ID    = $7E1FBD
+!AP_DRAW_CHECKPOINT_NUMBER  = $7E1FBE
+
+; ============================================
+; Selected checkpoint application
+;
+; Original:
+;   C00C8B  STZ $0B74
+;
+; $0B74:
+;   0 = stage entrance
+;   1 = midpoint
+;   2 = pre-boss
+; ============================================
+
+org $C00C8B
+    JSR AP_ApplySelectedCheckpoint
+
+org $C03388
+    JSR AP_StageSelectInitHook
 
 org $C034D0
     JSL AP_StageSelectNormalFrameHook
@@ -724,10 +745,92 @@ AP_MainLoopHook:
     JSL AP_UpdateVanillaWilyAvailability
     RTL
 
+AP_StageSelectInitHook:
+    ; Preserve the original vanilla call.
+    JSR $397E
+
+    ; Preserve A and processor flags returned by vanilla.
+    PHP
+    REP #$20
+    PHA
+
+    SEP #$20
+
+    ; No reason to upload checkpoint graphics when the
+    ; checkpoint-selection feature is disabled.
+    LDA.l AP_ConfigCheckpointSelection
+    BEQ .done
+
+    JSR AP_QueueCheckpointDigitsUpload
+
+.done:
+    REP #$20
+    PLA
+    PLP
+    RTS
+
+AP_QueueCheckpointDigitsUpload:
+    PHP
+
+    ; Preserve full A and X regardless of their current widths.
+    REP #$30
+    PHA
+    PHX
+
+    SEP #$30
+
+    ; X = current VRAM upload queue offset.
+    LDA.l $7E00CB
+    TAX
+
+    ; VMAIN setting used by the existing stage-select upload.
+    LDA #$80
+    STA.l $7E0500,x
+
+    REP #$20
+
+    ; Destination VRAM word address.
+    ;
+    ; OBJ tiles:
+    ;   $9D -> $69D0
+    ;   $9E -> $69E0
+    ;   $9F -> $69F0
+    LDA #$69D0
+    STA.l $7E0501,x
+
+    ; Three 8x8 4bpp tiles:
+    ; 3 * 32 bytes = $60 bytes.
+    LDA #$0060
+    STA.l $7E0503,x
+
+    ; Source address in ROM.
+    LDA.w #AP_CheckpointDigitGraphics
+    STA.l $7E0505,x
+
+    SEP #$20
+
+    ; Source bank.
+    LDA #$D8
+    STA.l $7E0507,x
+
+    ; One upload-queue entry = 8 bytes.
+    TXA
+    CLC
+    ADC #$08
+    STA.l $7E00CB
+
+    ; Restore full registers, then their original width flags.
+    REP #$30
+    PLX
+    PLA
+    PLP
+    RTS
+
 AP_StageSelectNormalFrameHook:
     JSR $381C
 
     JSR AP_ProcessStageSelectRefresh
+    JSR AP_HandleCheckpointSelection
 
     LDA $00A6
     RTL
@@ -800,7 +903,6 @@ AP_StageSelectPortraitHook:
     BNE .normal
 
 .locked:
-    ; Restore the original X expected by the portrait-position table.
     PLX
     PLP
 
@@ -810,7 +912,22 @@ AP_StageSelectPortraitHook:
     RTL
 
 .cleared:
-    ; Restore the original X and use the vanilla cleared portrait routine.
+    ; With checkpoint selection disabled, preserve the
+    ; original vanilla cleared-portrait rendering exactly.
+    LDA.l AP_ConfigCheckpointSelection
+    BEQ .vanilla_cleared
+
+    ; Checkpoint selector enabled: use our version of the
+    ; cleared overlay so the number can appear above it.
+    PLX
+    PLP
+
+    PHX
+    JSR AP_DrawClearedStagePortrait
+    PLX
+    RTL
+
+.vanilla_cleared:
     PLX
     PLP
 
@@ -818,7 +935,6 @@ AP_StageSelectPortraitHook:
     JSR $3902
     PLX
     RTL
-
 .normal:
     PLX
     PLP
@@ -1005,6 +1121,172 @@ AP_QueueStageSelectOverlayUpload:
     PLP
     RTS
 
+AP_ApplySelectedCheckpoint:
+    PHP
+    SEP #$30
+    PHX
+
+    ; Feature disabled: always use the vanilla entrance.
+    LDA.l AP_ConfigCheckpointSelection
+    BEQ .use_entrance
+
+    ; Checkpoint selection only applies to Robot Master stages 1-8.
+    LDA.l $7E0B73
+
+    CMP #$01
+    BCC .use_entrance
+
+    CMP #$09
+    BCS .use_entrance
+
+    TAX
+
+    ; If checkpoints are allowed in uncleared stages,
+    ; there is no boss-clear requirement.
+    LDA.l AP_ConfigCheckpointSelectionInUnclearedStages
+    BNE .checkpoint_allowed
+
+    ; Otherwise require this Robot Master to have been defeated.
+    LDA.l AP_BossBitMaskTable,x
+    AND.l !AP_BOSS_FLAGS
+    BEQ .use_entrance
+
+.checkpoint_allowed:
+    ; Clamp the AP-selected checkpoint to the valid range 0-2.
+    LDA.l !AP_SELECTED_CHECKPOINT
+    CMP #$03
+    BCC .store
+
+.use_entrance:
+    LDA #$00
+
+.store:
+    STA.l $7E0B74
+
+    PLX
+    PLP
+    RTS
+
+AP_HandleCheckpointSelection:
+    PHP
+    SEP #$30
+    PHX
+
+    ; Default to no checkpoint number this frame.
+    LDA #$00
+    STA.l !AP_DRAW_CHECKPOINT_NUMBER
+
+    ; Feature completely disabled.
+    LDA.l AP_ConfigCheckpointSelection
+    BNE .feature_enabled
+
+    ; Do not leave a stale checkpoint selection around.
+    LDA #$00
+    STA.l !AP_SELECTED_CHECKPOINT
+    BRA .done
+
+.feature_enabled:
+    ; $380E returns:
+    ;   0   = Wily box
+    ;   1-8 = Robot Master stage
+    JSR $380E
+
+    ; Reset checkpoint whenever the cursor moves
+    ; to a different stage/icon.
+    CMP.l !AP_LAST_STAGE_SELECT_ID
+    BEQ .same_selection
+
+    STA.l !AP_LAST_STAGE_SELECT_ID
+
+    LDA #$00
+    STA.l !AP_SELECTED_CHECKPOINT
+
+    ; Do not process L/R checkpoint input on the same
+    ; frame that the cursor moved.
+    BRA .done
+
+.same_selection:
+    CMP #$00
+    BEQ .done       ; Wily box
+
+    TAX
+
+        ; Robot Master stages only.
+    CPX #$01
+    BCC .done
+
+    CPX #$09
+    BCS .done
+
+    ; If Robot Master Access Codes are enabled, checkpoint
+    ; selection is only available for stages we can actually enter.
+    LDA.l AP_ConfigRobotMasterAccessCodes
+    BEQ .stage_accessible
+
+    LDA.l AP_BossBitMaskTable,x
+    AND.l !AP_ROBOT_MASTER_ACCESS
+    BEQ .done
+
+.stage_accessible:
+    ; Optionally allow checkpoint selection before
+    ; the Robot Master has been defeated.
+    LDA.l AP_ConfigCheckpointSelectionInUnclearedStages
+    BNE .checkpoint_allowed
+
+    ; Otherwise require the stage to have been cleared.
+    LDA.l AP_BossBitMaskTable,x
+    AND.l !AP_BOSS_FLAGS
+    BEQ .done
+
+.checkpoint_allowed:
+    ; Request checkpoint number drawing after vanilla OAM handling.
+    LDA #$01
+    STA.l !AP_DRAW_CHECKPOINT_NUMBER
+
+    ; $00A5 = one-frame input
+    ; R = $10
+    ; L = $20
+    LDA $00A5
+    AND #$10
+    BNE .next_checkpoint
+
+    LDA $00A5
+    AND #$20
+    BNE .previous_checkpoint
+
+    BRA .done
+
+.next_checkpoint:
+    LDA.l !AP_SELECTED_CHECKPOINT
+    INC
+    CMP #$03
+    BCC .store
+
+    LDA #$00
+    BRA .store
+
+.previous_checkpoint:
+    LDA.l !AP_SELECTED_CHECKPOINT
+    BNE .decrement
+
+    LDA #$02
+    BRA .store
+
+.decrement:
+    DEC
+
+.store:
+    STA.l !AP_SELECTED_CHECKPOINT
+
+    ; Keep the sound ID you just selected here.
+    LDA #$22
+    JSL $C03205
+
+.done:
+    PLX
+    PLP
+    RTS
+
 assert pc() <= $C07EC0
 
 org $C07EC0
@@ -1016,6 +1298,7 @@ AP_StageSelectWilyCycleHook:
     JSR $381C
 
     JSR AP_ProcessStageSelectRefresh
+    JSR AP_HandleCheckpointSelection
 
     JSR $380E
     BNE .not_wily_box
@@ -1132,6 +1415,48 @@ AP_StageSelectConfirmHook:
     ; Return through the normal no-confirm path.
     JML $C03521
 
+AP_DrawClearedStagePortrait:
+    REP #$30
+
+    LDA $93FD,X
+    TAX
+
+    PEA $807F
+    PLB
+
+    LDA #$200E
+    STA $C000,X
+    STA $C002,X
+    STA $C004,X
+    STA $C006,X
+    STA $C008,X
+
+    LDA #$000E
+    STA $C00A,X
+
+    LDY #$0005
+
+.row_loop:
+    TXA
+    CLC
+    ADC #$0040
+    TAX
+
+    LDA #$200E
+    STA $C000,X
+    STA $C002,X
+    STA $C004,X
+    STA $C006,X
+    STA $C008,X
+    STA $C00A,X
+
+    DEY
+    BNE .row_loop
+
+    PLB
+    SEP #$30
+    RTS
+
 AP_PostOAMDrawHook:
     PHP
     SEP #$30
@@ -1143,15 +1468,24 @@ AP_PostOAMDrawHook:
     LDA #$E0
     STA $08FD
 
-    ; Only draw if stage-select input requested it this frame.
+    ; Wily stage number has priority when the Wily box is selected.
     LDA.l !AP_DRAW_WILY_NUMBER
-    BEQ .done
+    BEQ .check_checkpoint
 
     LDA #$00
     STA.l !AP_DRAW_WILY_NUMBER
 
-    ; Draw after vanilla OAM render/cleanup.
     JSL AP_DrawSelectedWilyStageNumber
+    BRA .done
+
+.check_checkpoint:
+    LDA.l !AP_DRAW_CHECKPOINT_NUMBER
+    BEQ .done
+
+    LDA #$00
+    STA.l !AP_DRAW_CHECKPOINT_NUMBER
+
+    JSL AP_DrawSelectedCheckpointNumber
 
 .done:
     PLP
@@ -1608,6 +1942,12 @@ AP_StageSelectBitMaskTable:
     db $20 ; X=$0C
     db $40 ; X=$0E
     db $80 ; X=$10
+
+AP_CheckpointNumberTileTable:
+    db $00
+    db $9D ; 1
+    db $9E ; 2
+    db $9F ; 3
 
 AP_LoadBossDefeatedState:
     PHP
@@ -3083,6 +3423,89 @@ AP_WilyStageNumberTileTable:
     db $27
     db $28
 
+AP_DrawSelectedCheckpointNumber:
+    PHP
+    SEP #$30
+    PHX
+
+    ; Checkpoint values are 0-2, displayed as 1-3:
+    ;   0 = entrance  -> 1
+    ;   1 = midpoint  -> 2
+    ;   2 = pre-boss -> 3
+    LDA.l !AP_SELECTED_CHECKPOINT
+    INC
+    TAX
+
+    LDA.l AP_CheckpointNumberTileTable,x
+    STA.l $7E08F2
+
+    ; Convert selected stage ID 1-8 to the X index used
+    ; by the vanilla portrait-position table:
+    ;   1 -> $02
+    ;   2 -> $04
+    ;   ...
+    ;   8 -> $10
+    LDA.l !AP_LAST_STAGE_SELECT_ID
+    ASL
+    TAX
+
+    ; $8093FD,X = byte offset of the portrait's upper-left
+    ; tile inside the 32x32 tilemap.
+    REP #$20
+    LDA.l $8093FD,x
+    PHA
+
+    ; --------------------------------------------
+    ; X coordinate
+    ;
+    ; Tilemap entries are 2 bytes each.
+    ; offset & $003E gives the horizontal byte
+    ; position within the 32-tile row.
+    ;
+    ; *4 converts that to pixels.
+    ;
+    ; Portrait is 6 tiles wide:
+    ; top-right tile = left + 5 tiles = +40 pixels.
+    ; --------------------------------------------
+    AND #$003E
+    ASL
+    ASL
+    CLC
+    ADC #$0028
+
+    SEP #$20
+    STA.l $7E08F0
+
+    ; --------------------------------------------
+    ; Y coordinate
+    ;
+    ; One tilemap row = $40 bytes.
+    ; Dividing the row portion by 8 converts it
+    ; directly to an 8-pixel screen coordinate.
+    ; --------------------------------------------
+    REP #$20
+    PLA
+
+    AND #$07C0
+    LSR
+    LSR
+    LSR
+
+    SEP #$20
+    STA.l $7E08F1
+
+    LDA #$30
+    STA.l $7E08F3
+
+    ; Slot 124 high-OAM bits.
+    LDA.l $7E091F
+    AND #$FC
+    STA.l $7E091F
+
+    PLX
+    PLP
+    RTL
+
 AP_CheckExitUnitAccess:
     PHP
     SEP #$20
@@ -3123,6 +3546,25 @@ AP_CheckExitUnitAccess:
     CLC
     RTL
 
+AP_CheckpointDigitGraphics:
+    ; Tile $9D - "1"
+    db $18,$00,$24,$18,$44,$38,$24,$18
+    db $24,$18,$24,$18,$42,$3C,$7E,$00
+    db $00,$00,$00,$18,$00,$38,$00,$18
+    db $00,$18,$00,$18,$00,$3C,$00,$00
+
+    ; Tile $9E - "2"
+    db $3C,$00,$42,$3C,$99,$66,$99,$66
+    db $72,$0C,$66,$18,$81,$7E,$FF,$00
+    db $00,$00,$00,$3C,$00,$66,$08,$6E
+    db $00,$0C,$20,$38,$00,$7E,$00,$00
+
+    ; Tile $9F - "3"
+    db $3C,$00,$42,$3C,$99,$66,$F3,$0C
+    db $99,$66,$99,$66,$42,$3C,$3C,$00
+    db $00,$00,$00,$3C,$00,$66,$00,$0C
+    db $00,$66,$00,$66,$00,$3C,$00,$00
+
 assert pc() <= $D8FEA0
 
 org $D8FEA0
@@ -3157,13 +3599,18 @@ AP_ConfigWily4Weapons:
 AP_ConfigSkipIntroStage:
     db $01
 AP_ConfigSkipRobotMuseum:
-    db $00
+    db $01
 AP_ConfigRobotMuseumRobotMasters:
     db $04
 AP_ConfigRobotMasterAccessCodes:
-    db $01
+    db $00
 AP_ConfigStartingRobotMasterAccess:
     db $00
+AP_ConfigCheckpointSelection:
+    db $01
+AP_ConfigCheckpointSelectionInUnclearedStages:
+    db $00
+
 ; ============================================
 ; AP ROM auth token
 ;

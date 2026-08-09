@@ -171,6 +171,23 @@ class RobotMastersRequiredForRobotMuseum(Range):
     range_end = 8
     default = 4
 
+class CheckpointSelection(Toggle):
+    """
+    Allows L/R on the stage-select screen to choose between the entrance,
+    midpoint, and pre-boss checkpoints for cleared Robot Master stages.
+    """
+    display_name = "Checkpoint Selection"
+    default = True
+
+
+class CheckpointSelectionInUnclearedStages(Toggle):
+    """
+    Allows checkpoint selection before a Robot Master stage has been cleared.
+    Only applies when Checkpoint Selection is enabled.
+    """
+    display_name = "Checkpoint Selection in Uncleared Stages"
+    default = False
+
 @dataclass
 class MegaMan7Options(PerGameCommonOptions):
     robot_master_access_codes: RobotMasterAccessCodes
@@ -179,6 +196,9 @@ class MegaMan7Options(PerGameCommonOptions):
     skip_intro_stage: SkipIntroStage
     skip_robot_museum: SkipRobotMuseum
     robot_museum_robot_masters: RobotMastersRequiredForRobotMuseum
+
+    checkpoint_selection: CheckpointSelection
+    checkpoint_selection_in_uncleared_stages: CheckpointSelectionInUnclearedStages
 
     exit_unit_in_uncleared_stages: ExitUnitInUnclearedStages
     paid_exit_unit: PaidExitUnit
@@ -212,6 +232,8 @@ mm7_option_groups = [
             SkipIntroStage,
             SkipRobotMuseum,
             RobotMastersRequiredForRobotMuseum,
+            CheckpointSelection,
+            CheckpointSelectionInUnclearedStages,
         ],
     ),
     OptionGroup(
