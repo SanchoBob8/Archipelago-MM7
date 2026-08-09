@@ -7,7 +7,7 @@ class TestDefaultRomConfig(MM7TestBase):
     def test_default_rom_config(self) -> None:
         config = get_rom_config(self.world)
 
-        self.assertEqual(MM7_ROM_CONFIG_SIZE, 19)
+        self.assertEqual(MM7_ROM_CONFIG_SIZE, 21)
         self.assertEqual(len(config), MM7_ROM_CONFIG_SIZE)
 
         self.assertEqual(
@@ -32,6 +32,8 @@ class TestDefaultRomConfig(MM7TestBase):
                 4,      # Robot Masters required for Robot Museum
                 0,      # Robot Master Access Codes disabled
                 0,      # No starting Robot Master Access Code
+                1,
+                0,
             ]),
         )
 
@@ -54,6 +56,8 @@ class TestCustomRomConfig(MM7TestBase):
         "skip_robot_museum": True,
         "robot_museum_robot_masters": 7,
         "robot_master_access_codes": True,
+        "checkpoint_selection": True,
+        "checkpoint_selection_in_uncleared_stages": True
     }
 
     def test_custom_rom_config_order(self) -> None:
@@ -65,7 +69,7 @@ class TestCustomRomConfig(MM7TestBase):
 
         config = get_rom_config(self.world)
 
-        self.assertEqual(MM7_ROM_CONFIG_SIZE, 19)
+        self.assertEqual(MM7_ROM_CONFIG_SIZE, 21)
         self.assertEqual(len(config), MM7_ROM_CONFIG_SIZE)
 
         self.assertEqual(
@@ -90,5 +94,7 @@ class TestCustomRomConfig(MM7TestBase):
                 7,      # Robot Masters required for Robot Museum
                 1,      # Robot Master Access Codes enabled
                 0x01,   # Freeze Man starting Access Code
+                1,
+                1
             ]),
         )
