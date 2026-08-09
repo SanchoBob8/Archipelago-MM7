@@ -39,6 +39,11 @@ hirom
 !AP_ROBOT_MASTER_ACCESS     = $7E1FBA
 !AP_STAGE_SELECT_DIRTY      = $7E1FBB
 
+org $C034D0
+    JSL AP_StageSelectNormalFrameHook
+    NOP
+    NOP
+
 org $C0356D
     NOP
     NOP
@@ -719,6 +724,13 @@ AP_MainLoopHook:
     JSL AP_UpdateVanillaWilyAvailability
     RTL
 
+AP_StageSelectNormalFrameHook:
+    JSR $381C
+
+    JSR AP_ProcessStageSelectRefresh
+
+    LDA $00A6
+    RTL
 
 AP_NormalStageEntryGateHook:
     PHP
@@ -862,6 +874,136 @@ AP_DrawLockedStagePortrait:
     SEP #$30
     RTS
 
+AP_ProcessStageSelectRefresh:
+    PHP
+    SEP #$30
+    PHX
+    PHY
+
+    LDA.l !AP_STAGE_SELECT_DIRTY
+    BEQ .done
+
+    ; Each bit corresponds to one Robot Master:
+    ; bit 0 -> X=$02
+    ; bit 1 -> X=$04
+    ; ...
+    ; bit 7 -> X=$10
+    LDX #$00
+
+.check_next:
+    LDA.l AP_BitMaskTable,x
+    AND.l !AP_STAGE_SELECT_DIRTY
+    BEQ .next
+
+    ; Preserve the bit index while converting it to the X value used
+    ; by the vanilla portrait-position table.
+    PHX
+
+    TXA
+    INC
+    ASL
+    TAX
+
+    JSR AP_ClearUnlockedStagePortrait
+
+    PLX
+
+.next:
+    INX
+    CPX #$08
+    BCC .check_next
+
+    ; We modified $7FC000 directly. Queue that tilemap for upload
+    ; without clearing/reconstructing it like $38B7 does.
+    JSR AP_QueueStageSelectOverlayUpload
+
+    LDA #$00
+    STA.l !AP_STAGE_SELECT_DIRTY
+
+.done:
+    PLY
+    PLX
+    PLP
+    RTS
+
+AP_ClearUnlockedStagePortrait:
+    ; X = vanilla portrait table index:
+    ; $02,$04,$06,$08,$0A,$0C,$0E,$10
+    ;
+    ; This is the inverse of AP_DrawLockedStagePortrait:
+    ; instead of filling the 6x6 rectangle with $B03D,
+    ; clear only that rectangle back to $0000.
+
+    REP #$30
+
+    ; Vanilla $C03902 reads $93FD,X with DB=$80.
+    ; Use a long address here so we do not depend on DB.
+    LDA.l $8093FD,x
+    TAX
+
+    LDY #$0006
+
+.row_loop:
+    LDA #$0000
+
+    ; Six tilemap entries in this portrait row.
+    STA.l $7FC000,x
+    STA.l $7FC002,x
+    STA.l $7FC004,x
+    STA.l $7FC006,x
+    STA.l $7FC008,x
+    STA.l $7FC00A,x
+
+    ; Next tilemap row = +$40 bytes.
+    TXA
+    CLC
+    ADC #$0040
+    TAX
+
+    DEY
+    BNE .row_loop
+
+    SEP #$30
+    RTS
+
+AP_QueueStageSelectOverlayUpload:
+    PHP
+    SEP #$30
+    PHX
+
+    ; X = current upload queue offset.
+    ; LDX has no 24-bit long addressing mode, so load through A.
+    LDA.l $7E00CB
+    TAX
+
+    REP #$20
+
+    ; Transfer size.
+    LDA #$0800
+    STA.l $7E0501,x
+    STA.l $7E0503,x
+
+    ; Source address = $7F:C000.
+    LDA #$C000
+    STA.l $7E0505,x
+
+    SEP #$20
+
+    LDA #$80
+    STA.l $7E0500,x
+
+    LDA #$7F
+    STA.l $7E0507,x
+
+    ; Advance upload queue by one 8-byte entry.
+    TXA
+    CLC
+    ADC #$08
+    STA.l $7E00CB
+
+    PLX
+    PLP
+    RTS
 
 assert pc() <= $C07EC0
 
@@ -871,10 +1013,10 @@ AP_StageSelectWilyCycleHook:
     PHP
     SEP #$30
 
-    ; Preserve replaced vanilla behavior.
     JSR $381C
 
-    ; Only handle/display overlay if cursor is on the Wily box.
+    JSR AP_ProcessStageSelectRefresh
+
     JSR $380E
     BNE .not_wily_box
 
@@ -1001,27 +1143,7 @@ AP_PostOAMDrawHook:
     LDA #$E0
     STA $08FD
 
-    ; Rebuild the portrait overlay after receiving a new Access Code.
-    LDA.l !AP_STAGE_SELECT_DIRTY
-    BEQ .overlay_current
-
-    ; $C038B7 clears the overlay tilemap, redraws all locked/cleared
-    ; portraits, and queues the tilemap for upload.
-    PHB
-    PHX
-    PHY
-
-    JSR $38B7
-
-    PLY
-    PLX
-    PLB
-
-    LDA #$00
-    STA.l !AP_STAGE_SELECT_DIRTY
-
-.overlay_current:
-    ; Only draw if stage-select input hook requested it this frame.
+    ; Only draw if stage-select input requested it this frame.
     LDA.l !AP_DRAW_WILY_NUMBER
     BEQ .done
 
@@ -1379,8 +1501,11 @@ AP_CheckItemReceive:
     ORA.l !AP_ROBOT_MASTER_ACCESS
     STA.l !AP_ROBOT_MASTER_ACCESS
 
-    ; Request a stage-select overlay rebuild.
-    LDA #$01
+    ; Remember exactly which portrait(s) need to be refreshed.
+    ; Use a bitmask so multiple Access Codes received before the
+    ; next refresh are not lost.
+    LDA.l !AP_TEMP
+    ORA.l !AP_STAGE_SELECT_DIRTY
     STA.l !AP_STAGE_SELECT_DIRTY
 
     JMP .finish
