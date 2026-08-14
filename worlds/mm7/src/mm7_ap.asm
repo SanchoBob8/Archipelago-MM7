@@ -3923,9 +3923,7 @@ AP_PaidExitBoltGraphicsBottom:
     db $E1,$E1,$F1,$E1,$FA,$F2,$FE,$FE
     db $FC,$FC,$F8,$F8,$00,$00,$00,$00
 
-assert pc() <= $D8FEA0
-
-assert pc() <= $D8FEA0
+assert pc() <= $D8FEA0S
 
 org $D8FEA0
 AP_ConfigStartingLives:
