@@ -242,6 +242,33 @@ org $C047D9
     db $90, $28 ; BCC $C04807
     NOP
 
+; ============================================
+; Paid Exit Unit inventory display
+;
+; Original:
+;   C04E45  LDA $0BA4
+;   C04E48  BIT #$20
+;   C04E4A  BEQ $C04E51
+;
+; Real Exit Unit:
+;   draw vanilla Exit Unit, no price.
+;
+; Paid Exit Unit only:
+;   draw vanilla Exit Unit and configured
+;   three-digit bolt price underneath.
+;
+; Neither:
+;   leave the Exit Unit slot hidden.
+; ============================================
+
+org $C04E45
+    JML AP_ExitUnitDisplayGate
+    NOP
+    NOP
+    NOP
+
+assert pc() == $C04E4C
+
 ; Wily unlock gate.
 ; Replaces vanilla all-weapons check with AP Wily Access Code checks.
 
@@ -2587,6 +2614,9 @@ AP_ExitUnitMedalCheck:
     JML $C047F0
 
 .no_medal:
+    LDA #$00
+    STA.l !AP_EXIT_UNIT_PAID_PENDING
+
     PLX
     PLP
     JML $C04807
@@ -3506,9 +3536,294 @@ AP_DrawSelectedCheckpointNumber:
     PLP
     RTL
 
+AP_ExitUnitDisplayGate:
+    PHP
+    SEP #$20
+
+    ; Real Exit Unit owned?
+    LDA.l $7E0BA4
+    BIT #$20
+    BNE .real_exit_unit
+
+    ; No real item. Is the paid feature enabled?
+    LDA.l AP_ConfigPaidExitUnit
+    BEQ .hidden
+
+    ; Paid version:
+    ; draw the configured cost underneath the Exit Unit.
+    JSR AP_DrawPaidExitCost
+
+    PLP
+    JML $C04E4C
+
+.real_exit_unit:
+    ; Real Exit Unit does not display a bolt cost.
+    JSR AP_ClearPaidExitCost
+
+    PLP
+
+    JML $C04E4C
+
+.hidden:
+    ; Neither real nor paid Exit Unit.
+    JSR AP_ClearPaidExitCost
+
+    PLP
+    JML $C04E51
+
+AP_DrawPaidExitCost:
+    PHP
+
+    ; Keep the bolt graphics loaded while the paid Exit Unit
+    ; display is active.
+    JSR AP_QueuePaidExitBoltUpload
+
+    ; Preserve full A and X.
+    REP #$30
+    PHA
+    PHX
+
+    ; Paid Exit Unit cost is stored little-endian:
+    ;   AP_ConfigPaidExitUnitCostLo
+    ;   AP_ConfigPaidExitUnitCostHi
+    ;
+    ; A = configured 16-bit cost, range 0-999.
+    LDA.l AP_ConfigPaidExitUnitCostLo
+
+    ; ----------------------------------------
+    ; Hundreds
+    ; ----------------------------------------
+
+    LDX #$0000
+
+.hundreds_loop:
+    CMP #$0064
+    BCC .hundreds_done
+
+    SEC
+    SBC #$0064
+    INX
+    BRA .hundreds_loop
+
+.hundreds_done:
+    ; Preserve remainder for tens/ones.
+    PHA
+
+    ; Top half of hundreds digit:
+    ; tile $10 + digit, palette/attributes $30.
+    TXA
+    CLC
+    ADC #$3010
+    STA.l $7FAD30
+
+    ; Bottom half:
+    ; tile $20 + digit.
+    TXA
+    CLC
+    ADC #$3020
+    STA.l $7FAD70
+
+    ; Restore remainder (0-99).
+    PLA
+
+    ; ----------------------------------------
+    ; Tens
+    ; ----------------------------------------
+
+    LDX #$0000
+
+.tens_loop:
+    CMP #$000A
+    BCC .tens_done
+
+    SEC
+    SBC #$000A
+    INX
+    BRA .tens_loop
+
+.tens_done:
+    ; Preserve ones remainder.
+    PHA
+
+    ; Top half of tens digit.
+    TXA
+    CLC
+    ADC #$3010
+    STA.l $7FAD32
+
+    ; Bottom half.
+    TXA
+    CLC
+    ADC #$3020
+    STA.l $7FAD72
+
+    ; A = ones digit, 0-9.
+    PLA
+
+    ; ----------------------------------------
+    ; Ones
+    ; ----------------------------------------
+
+    PHA
+
+    ; Top half.
+    CLC
+    ADC #$3010
+    STA.l $7FAD34
+
+    PLA
+
+    ; Bottom half.
+    CLC
+    ADC #$3020
+    STA.l $7FAD74
+
+    ; ----------------------------------------
+    ; Bolt graphics are uploaded into BG VRAM by
+    ; AP_QueuePaidExitBoltUpload:
+    ;
+    ;   $2DE0 -> tile $1DE -> $39DE
+    ;   $2DF0 -> tile $1DF -> $39DF
+    ;   $2EE0 -> tile $1EE -> $39EE
+    ;   $2EF0 -> tile $1EF -> $39EF
+    ; ----------------------------------------
+
+    LDA #$39DE
+    STA.l $7FAD36
+
+    LDA #$39DF
+    STA.l $7FAD38
+
+    LDA #$39EE
+    STA.l $7FAD76
+
+    LDA #$39EF
+    STA.l $7FAD78
+
+    PLX
+    PLA
+    PLP
+    RTS
+
+AP_ClearPaidExitCost:
+    PHP
+    REP #$20
+    PHA
+
+    ; $2000 is the blank tilemap entry used in
+    ; this empty region of the pause menu.
+
+    LDA #$2000
+
+    STA.l $7FAD30
+    STA.l $7FAD32
+    STA.l $7FAD34
+    STA.l $7FAD36
+    STA.l $7FAD38
+
+    STA.l $7FAD70
+    STA.l $7FAD72
+    STA.l $7FAD74
+    STA.l $7FAD76
+    STA.l $7FAD78
+
+    PLA
+    PLP
+    RTS
+
+AP_QueuePaidExitBoltUpload:
+    PHP
+
+    ; Preserve full A and X regardless of current widths.
+    REP #$30
+    PHA
+    PHX
+
+    SEP #$30
+
+    ; Current VRAM upload queue offset.
+    LDA.l $7E00CB
+    TAX
+
+    ; ============================================
+    ; Top half of bolt:
+    ;   C6 -> VRAM $2DE0
+    ;   C7 -> VRAM $2DF0
+    ;
+    ; Two 8x8 4bpp tiles = $40 bytes.
+    ; ============================================
+
+    LDA #$80
+    STA.l $7E0500,x
+
+    REP #$20
+
+    LDA #$2DE0
+    STA.l $7E0501,x
+
+    LDA #$0040
+    STA.l $7E0503,x
+
+    LDA.w #AP_PaidExitBoltGraphicsTop
+    STA.l $7E0505,x
+
+    SEP #$20
+
+    LDA #$D8
+    STA.l $7E0507,x
+
+    ; Move to next 8-byte queue entry.
+    TXA
+    CLC
+    ADC #$08
+    TAX
+
+    ; ============================================
+    ; Bottom half of bolt:
+    ;   D6 -> VRAM $2EE0
+    ;   D7 -> VRAM $2EF0
+    ; ============================================
+
+    LDA #$80
+    STA.l $7E0500,x
+
+    REP #$20
+
+    LDA #$2EE0
+    STA.l $7E0501,x
+
+    LDA #$0040
+    STA.l $7E0503,x
+
+    LDA.w #AP_PaidExitBoltGraphicsBottom
+    STA.l $7E0505,x
+
+    SEP #$20
+
+    LDA #$D8
+    STA.l $7E0507,x
+
+    ; Two queue entries consumed = $10 bytes total.
+    TXA
+    CLC
+    ADC #$08
+    STA.l $7E00CB
+
+    ; Restore registers and original widths.
+    REP #$30
+    PLX
+    PLA
+    PLP
+    RTS
+
 AP_CheckExitUnitAccess:
     PHP
     SEP #$20
+
+    ; Every activation attempt starts as non-paid.
+    ; Set this again below only if paid access is actually granted.
+    LDA #$00
+    STA.l !AP_EXIT_UNIT_PAID_PENDING
 
     ; If the real Exit Unit item is owned, allow for free.
     LDA.l $7E0BA4
@@ -3564,6 +3879,51 @@ AP_CheckpointDigitGraphics:
     db $99,$66,$99,$66,$42,$3C,$3C,$00
     db $00,$00,$00,$3C,$00,$66,$00,$0C
     db $00,$66,$00,$66,$00,$3C,$00,$00
+
+; ============================================
+; Paid Exit Unit bolt graphics
+;
+; Original vanilla 16x16 bolt OBJ:
+;
+;   C6 C7
+;   D6 D7
+;
+; Uploaded into unused pause-menu BG VRAM:
+;
+;   $2DE0 $2DF0
+;   $2EE0 $2EF0
+; ============================================
+
+AP_PaidExitBoltGraphicsTop:
+
+    ; Tile C6 -> BG VRAM $2DE0
+    db $00,$00,$00,$00,$00,$00,$01,$01
+    db $03,$03,$7F,$7E,$AB,$D6,$FF,$AA
+    db $00,$00,$00,$00,$00,$00,$01,$01
+    db $03,$03,$7F,$7F,$FE,$FE,$AA,$AA
+
+    ; Tile C7 -> BG VRAM $2DF0
+    db $00,$00,$00,$00,$F8,$F8,$B4,$6C
+    db $EE,$DE,$D6,$B6,$EB,$AF,$F7,$B9
+    db $00,$00,$00,$00,$F8,$F8,$FC,$FC
+    db $FE,$FE,$FA,$F2,$B1,$A1,$A1,$A1
+
+
+AP_PaidExitBoltGraphicsBottom:
+
+    ; Tile D6 -> BG VRAM $2EE0
+    db $AB,$FE,$D6,$FF,$7E,$7F,$03,$03
+    db $01,$01,$00,$00,$00,$00,$00,$00
+    db $FF,$FF,$FF,$FF,$7F,$7F,$03,$03
+    db $01,$01,$00,$00,$00,$00,$00,$00
+
+    ; Tile D7 -> BG VRAM $2EF0
+    db $F7,$B9,$AB,$EF,$96,$F6,$CE,$FE
+    db $E4,$FC,$F8,$F8,$00,$00,$00,$00
+    db $E1,$E1,$F1,$E1,$FA,$F2,$FE,$FE
+    db $FC,$FC,$F8,$F8,$00,$00,$00,$00
+
+assert pc() <= $D8FEA0
 
 assert pc() <= $D8FEA0
 
