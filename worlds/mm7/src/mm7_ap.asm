@@ -42,6 +42,13 @@ hirom
 !AP_LAST_STAGE_SELECT_ID    = $7E1FBD
 !AP_DRAW_CHECKPOINT_NUMBER  = $7E1FBE
 
+; AP notification text buffer.
+; $7F7840-$7F78BF provisionally reserved for AP.
+; Runtime-tested during stage gameplay, pause menu, and shop.
+; If vanilla usage is discovered later, relocate this buffer.
+!AP_NOTIFICATION_BUFFER      = $7F7840
+!AP_NOTIFICATION_BUFFER_SIZE = $0080
+
 ; ============================================
 ; Selected checkpoint application
 ;
@@ -56,6 +63,23 @@ hirom
 
 org $C00C8B
     JSR AP_ApplySelectedCheckpoint
+
+; ============================================
+; AP notification dialogue text pointer
+;
+; Vanilla C0125E-C01270:
+;   bank = $81
+;   pointer = [$818000 + dialogue_id * 2]
+;
+; Dialogue $1D is repurposed for AP notifications
+; and reads its script from the AP notification WRAM buffer.
+; ============================================
+
+org $C0125E
+    JSL AP_DialogueTextPointerHook
+    fillbyte $EA
+    fill $0F
+assert pc() == $C01271
 
 org $C03388
     JSR AP_StageSelectInitHook
@@ -223,6 +247,31 @@ org $C2C4D9
     NOP
     NOP
     NOP
+
+    ; ============================================
+; Skip vanilla Proto Shield receive message.
+; Dialogue ID $1D is repurposed for AP item notifications.
+; ============================================
+
+org $C3721C
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+assert pc() == $C37222
+
+; Skip waiting for the removed Proto Shield dialogue to complete.
+org $C37223
+    BRA +
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
++
+assert pc() == $C3722A
 
 org $C3722E
     JML AP_ProtoShieldRewardCheck
@@ -783,6 +832,15 @@ AP_StageSelectInitHook:
 
     SEP #$20
 
+    ; BG3 is used for AP notifications.
+    ; Disable color math on BG3 so the notification background
+    ; remains opaque over the stage-select cursor sprites.
+    LDA #$7B
+    STA.l $7E00BD
+
+    JSL AP_QueueStageSelectNotificationFont
+    JSL AP_QueueStageSelectNotificationTest
+
     ; No reason to upload checkpoint graphics when the
     ; checkpoint-selection feature is disabled.
     LDA.l AP_ConfigCheckpointSelection
@@ -825,12 +883,10 @@ AP_QueueCheckpointDigitsUpload:
     LDA #$69D0
     STA.l $7E0501,x
 
-    ; Three 8x8 4bpp tiles:
-    ; 3 * 32 bytes = $60 bytes.
+    ; Three 8x8 4bpp tiles = $60 bytes.
     LDA #$0060
     STA.l $7E0503,x
 
-    ; Source address in ROM.
     LDA.w #AP_CheckpointDigitGraphics
     STA.l $7E0505,x
 
@@ -1883,6 +1939,10 @@ AP_CheckItemReceive:
     STA.l !AP_RECV_INDEX_HI
 
 .clear_flag:
+    ; Temporary gameplay notification test.
+    LDA #$1D
+    JSL $C2CE03
+
     LDA #$00
     STA.l !AP_EXECUTE_FLAG
 
@@ -1890,6 +1950,176 @@ AP_CheckItemReceive:
     PLX
     PLP
     RTL
+
+AP_DialogueTextPointerHook:
+    ; Dialogue ID is stored in $F1.
+    SEP #$20
+
+    LDA $F1
+    CMP #$1D
+    BEQ .ap_notification
+
+.vanilla:
+    ; Reproduce the original dialogue pointer lookup.
+    LDA #$81
+    STA $7A
+
+    REP #$30
+
+    LDA $F1
+    AND #$00FF
+    ASL
+    TAX
+
+    LDA.l $818000,x
+    STA $78
+
+    RTL
+
+.ap_notification:
+    ; AP client supplies the complete dialogue script in WRAM.
+    LDA #$7F
+    STA $7A
+
+    REP #$30
+
+    LDA #$7840
+    STA $78
+
+    RTL
+
+; ============================================
+; Temporary stage-select BG3 notification test
+; ============================================
+
+AP_QueueStageSelectNotificationTest:
+    PHP
+    REP #$30
+    PHA
+    PHX
+
+    SEP #$30
+
+    ; Current VRAM upload queue offset.
+    LDA.l $7E00CB
+    TAX
+
+    ; Standard upload mode.
+    LDA #$80
+    STA.l $7E0500,x
+
+    REP #$20
+
+    ; BG3 tilemap:
+    ; base = $0800
+    ; row 10, column 6 = $0946
+    LDA #$0946
+    STA.l $7E0501,x
+
+    ; "  AP ITEM  " = 11 tilemap words = 22 bytes.
+    LDA #$0016
+    STA.l $7E0503,x
+
+    ; Source data in bank D8.
+    LDA.w #AP_StageSelectNotificationTestData
+    STA.l $7E0505,x
+
+    SEP #$20
+
+    LDA #$D8
+    STA.l $7E0507,x
+
+    ; Advance queue by one entry.
+    TXA
+    CLC
+    ADC #$08
+    STA.l $7E00CB
+
+    REP #$30
+    PLX
+    PLA
+    PLP
+    RTL
+; ============================================
+; Stage-select AP notification font upload
+;
+; Custom font occupies BG3 tiles $60-$7F:
+;   VRAM $0300-$03FF (word addresses)
+;
+; 32 2bpp tiles * 16 bytes = $0200 bytes.
+; Graphics are stored at $CA53B5.
+; ============================================
+
+AP_QueueStageSelectNotificationFont:
+    PHP
+    REP #$30
+    PHA
+    PHX
+
+    SEP #$30
+
+    ; X = current VRAM upload queue offset.
+    LDA.l $7E00CB
+    TAX
+
+    ; Standard VRAM upload mode.
+    LDA #$80
+    STA.l $7E0500,x
+
+    REP #$20
+
+    ; BG3 tile $60:
+    ; $60 * 8 VRAM words = $0300.
+    LDA #$0300
+    STA.l $7E0501,x
+
+    ; 32 2bpp tiles * 16 bytes = $0200 bytes.
+    LDA #$0200
+    STA.l $7E0503,x
+
+    ; Source = $CA:53B5.
+    LDA.w #AP_StageSelectNotificationFont
+    STA.l $7E0505,x
+
+    SEP #$20
+
+    LDA #$CA
+    STA.l $7E0507,x
+
+    ; One upload queue entry = 8 bytes.
+    TXA
+    CLC
+    ADC #$08
+    STA.l $7E00CB
+
+    REP #$30
+    PLX
+    PLA
+    PLP
+    RTL
+
+; ============================================
+; Temporary stage-select notification test data
+; Uses the custom opaque notification font at BG3 tiles $60-$7F.
+; ============================================
+
+AP_StageSelectNotificationTestData:
+    ; "  AP ITEM  "
+    ;
+    ; All characters use the custom opaque font at $60-$7F.
+    ; $3000 = palette 4 + high priority.
+
+    dw $3060 ; opaque space
+    dw $3060 ; opaque space
+    dw $3061 ; A
+    dw $3070 ; P
+    dw $3060 ; opaque space
+    dw $3069 ; I
+    dw $3074 ; T
+    dw $3065 ; E
+    dw $306D ; M
+    dw $3060 ; opaque space
+    dw $3060 ; opaque space
 
 AP_InitIntroStageFlag:
     PHP
@@ -3923,7 +4153,7 @@ AP_PaidExitBoltGraphicsBottom:
     db $E1,$E1,$F1,$E1,$FA,$F2,$FE,$FE
     db $FC,$FC,$F8,$F8,$00,$00,$00,$00
 
-assert pc() <= $D8FEA0S
+assert pc() <= $D8FEA0
 
 org $D8FEA0
 AP_ConfigStartingLives:
@@ -3989,3 +4219,161 @@ AP_ROM_AUTH_TOKEN:
     fill 27
 
 assert pc() <= $D8FF00
+
+; ============================================
+; AP stage-select notification font
+;
+; Confirmed $FF candidate area in clean ROM:
+;   file offset $0A53B5-$0A55FF
+;   CPU address $CA53B5-$CA55FF
+;
+; Custom BG3 tile mapping:
+;   $60 = opaque space
+;   $61-$7A = A-Z
+;   $7B = ?
+;   $7C = -
+;   $7D = .
+;   $7E = !
+;   $7F = '
+;
+; All formerly transparent pixels use
+; palette color 3 to create the dark background.
+; ============================================
+
+org $CA53B5
+
+AP_StageSelectNotificationFont:
+
+; $60 = opaque space
+    db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+    db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+
+; $61 = A
+    db $FF,$FF,$EB,$F7,$F7,$EB,$DD,$EB
+    db $EB,$DD,$BE,$C1,$FF,$9C,$DD,$BE
+
+; $62 = B
+    db $FF,$FF,$FD,$83,$FE,$BD,$FE,$BD
+    db $FD,$83,$FE,$BD,$FE,$BD,$FD,$83
+
+; $63 = C
+    db $FF,$FF,$DD,$E3,$AE,$DD,$DD,$BE
+    db $DF,$BF,$DF,$BF,$AE,$DD,$DD,$E3
+
+; $64 = D
+    db $FF,$FF,$FD,$C3,$FE,$DD,$FF,$DE
+    db $FF,$DE,$FF,$DE,$FE,$DD,$FD,$C3
+
+; $65 = E
+    db $FF,$FF,$FE,$C1,$FF,$DF,$FF,$DF
+    db $FF,$C1,$FF,$DF,$FF,$DF,$FE,$C1
+
+; $66 = F
+    db $FF,$FF,$FE,$C1,$FF,$DF,$FF,$DF
+    db $FF,$C1,$FF,$DF,$FF,$DF,$FF,$DF
+
+; $67 = G
+    db $FF,$FF,$DF,$E1,$BD,$DE,$FF,$BF
+    db $FF,$B0,$FD,$BE,$BF,$DC,$DD,$E2
+
+; $68 = H
+    db $FF,$FF,$FF,$DE,$FF,$DE,$FF,$DE
+    db $FF,$C0,$FF,$DE,$FF,$DE,$FF,$DE
+
+; $69 = I
+    db $FF,$FF,$FF,$E3,$FF,$F7,$FF,$F7
+    db $FF,$F7,$FF,$F7,$FF,$F7,$FF,$E3
+
+; $6A = J
+    db $FF,$FF,$FE,$F9,$FF,$FD,$FF,$FD
+    db $FF,$FD,$FF,$DD,$EB,$DD,$FF,$E3
+
+; $6B = K
+    db $FF,$FF,$FB,$DD,$F7,$DB,$EF,$D7
+    db $FF,$C7,$E7,$DB,$FD,$DB,$FE,$DD
+
+; $6C = L
+    db $FF,$FF,$FF,$EF,$FF,$EF,$FF,$EF
+    db $FF,$EF,$FF,$EF,$FF,$EF,$FE,$E1
+
+; $6D = M
+    db $FF,$FF,$FF,$9C,$EB,$9C,$DD,$AA
+    db $D5,$AA,$F7,$AA,$EB,$B6,$FF,$B6
+
+; $6E = N
+    db $FF,$FF,$FD,$CE,$F5,$CE,$ED,$D6
+    db $E5,$DA,$ED,$DA,$EB,$DC,$ED,$DE
+
+; $6F = O
+    db $FF,$FF,$DD,$E3,$AA,$DD,$DD,$BE
+    db $DD,$BE,$DD,$BE,$AA,$DD,$DD,$E3
+
+; $70 = P
+    db $FF,$FF,$FD,$83,$DA,$BD,$DA,$BD
+    db $FD,$83,$DF,$BF,$DF,$BF,$DF,$BF
+
+; $71 = Q
+    db $FF,$FF,$DD,$E3,$A2,$DD,$DD,$BE
+    db $DD,$BE,$D5,$BA,$BA,$DD,$DD,$E2
+
+; $72 = R
+    db $FF,$FF,$FD,$83,$DA,$BD,$DA,$BD
+    db $FD,$83,$DB,$BD,$DB,$BD,$DA,$BD
+
+; $73 = S
+    db $FF,$FF,$FE,$E1,$ED,$DE,$EF,$DF
+    db $FF,$E1,$FD,$FE,$EF,$DE,$DE,$E1
+
+; $74 = T
+    db $FF,$FF,$FE,$81,$FF,$F7,$FF,$F7
+    db $FF,$F7,$FF,$F7,$FF,$F7,$FF,$F7
+
+; $75 = U
+    db $FF,$FF,$FF,$DE,$FF,$DE,$FF,$DE
+    db $FF,$DE,$FF,$DE,$ED,$DE,$FF,$E1
+
+; $76 = V
+    db $FF,$FF,$DD,$BE,$BE,$DD,$EB,$DD
+    db $DD,$EB,$F7,$EB,$EB,$F7,$FF,$F7
+
+; $77 = W
+    db $FF,$FF,$DD,$B6,$DD,$B6,$BE,$D5
+    db $AA,$D5,$FF,$C1,$DD,$EB,$DD,$EB
+
+; $78 = X
+    db $FF,$FF,$BE,$DD,$DD,$EB,$F7,$EB
+    db $EB,$F7,$F7,$EB,$EB,$DD,$BE,$DD
+
+; $79 = Y
+    db $FF,$FF,$DD,$BE,$FF,$DD,$DD,$EB
+    db $F7,$EB,$FF,$F7,$FF,$F7,$FF,$F7
+
+; $7A = Z
+    db $FF,$FF,$BE,$C1,$FE,$F9,$FD,$FB
+    db $FB,$F7,$D7,$EF,$BF,$CF,$BE,$C1
+
+; $7B = ?
+    db $FF,$FF,$FF,$E3,$EB,$DD,$FB,$DD
+    db $F7,$FB,$EF,$F7,$FF,$FF,$EF,$F7
+
+; $7C = -
+    db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+    db $FF,$81,$FF,$FF,$FF,$FF,$FF,$FF
+
+; $7D = .
+    db $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+    db $FF,$FF,$FF,$E7,$FF,$E7,$FF,$FF
+
+; $7E = !
+    db $FF,$FF,$FF,$CF,$FF,$CF,$FF,$CF
+    db $CF,$FF,$FF,$FF,$FF,$CF,$FF,$FF
+
+; $7F = '
+    db $FF,$FF,$FF,$F3,$FF,$F3,$FF,$FB
+    db $FF,$FB,$FF,$FF,$FF,$FF,$FF,$FF
+
+; Exactly 32 tiles * 16 bytes = $0200 bytes.
+assert pc() == $CA55B5
+
+; Do not exceed the confirmed $FF run ending at $CA55FF.
+assert pc() <= $CA5600
