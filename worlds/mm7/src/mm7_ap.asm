@@ -41,13 +41,29 @@ hirom
 !AP_SELECTED_CHECKPOINT     = $7E1FBC
 !AP_LAST_STAGE_SELECT_ID    = $7E1FBD
 !AP_DRAW_CHECKPOINT_NUMBER  = $7E1FBE
+!AP_NOTIFICATION_REQUEST    = $7E1FBF
+!AP_NOTIFICATION_TIMER      = $7E1FC0
 
-; AP notification text buffer.
+; AP notification WRAM block.
 ; $7F7840-$7F78BF provisionally reserved for AP.
+;
+; $7F7840-$7F788F = complete dialogue script ($50 bytes)
+; $7F7890-$7F78BF = temporary 24-tile BG3 row ($30 bytes)
+;
 ; Runtime-tested during stage gameplay, pause menu, and shop.
 ; If vanilla usage is discovered later, relocate this buffer.
+
 !AP_NOTIFICATION_BUFFER      = $7F7840
-!AP_NOTIFICATION_BUFFER_SIZE = $0080
+!AP_NOTIFICATION_BUFFER_SIZE = $0050
+
+; First printable character of the gameplay dialogue script.
+; The first $0E bytes are the MM7 dialogue setup sequence.
+!AP_NOTIFICATION_TEXT_START = $7F784E
+
+; Shared stage-select BG3 row workspace.
+; 24 tilemap words = $30 bytes.
+!AP_STAGE_SELECT_NOTIFICATION_ROW      = $7F7890
+!AP_STAGE_SELECT_NOTIFICATION_ROW_SIZE = $0030
 
 ; ============================================
 ; Selected checkpoint application
@@ -839,7 +855,6 @@ AP_StageSelectInitHook:
     STA.l $7E00BD
 
     JSL AP_QueueStageSelectNotificationFont
-    JSL AP_QueueStageSelectNotificationTest
 
     ; No reason to upload checkpoint graphics when the
     ; checkpoint-selection feature is disabled.
@@ -914,6 +929,7 @@ AP_StageSelectNormalFrameHook:
 
     JSR AP_ProcessStageSelectRefresh
     JSR AP_HandleCheckpointSelection
+    JSL AP_UpdateStageSelectNotification
 
     LDA $00A6
     RTL
@@ -1382,6 +1398,7 @@ AP_StageSelectWilyCycleHook:
 
     JSR AP_ProcessStageSelectRefresh
     JSR AP_HandleCheckpointSelection
+    JSL AP_UpdateStageSelectNotification
 
     JSR $380E
     BNE .not_wily_box
@@ -1989,10 +2006,312 @@ AP_DialogueTextPointerHook:
     RTL
 
 ; ============================================
-; Temporary stage-select BG3 notification test
+; Stage-select AP notification state
+;
+; REQUEST:
+;   0 = idle
+;   1 = build/upload row 1
+;   2 = build/upload row 2
+;
+; Rows are uploaded on consecutive frames because
+; they share the same $7F7890-$7F78BF workspace.
+;
+; TIMER:
+;   Counts down once per stage-select frame.
+;   $B4 = 180 frames, approximately 3 seconds.
 ; ============================================
 
-AP_QueueStageSelectNotificationTest:
+AP_UpdateStageSelectNotification:
+    PHP
+    SEP #$20
+    PHA
+
+    LDA.l !AP_NOTIFICATION_REQUEST
+    BEQ .update_timer
+
+    CMP #$01
+    BEQ .render_row
+
+    CMP #$02
+    BEQ .render_row
+
+    ; Invalid state: recover safely.
+    LDA #$00
+    STA.l !AP_NOTIFICATION_REQUEST
+    BRA .done
+
+.render_row:
+    ; Build the row corresponding to REQUEST 1 or 2.
+    JSL AP_BuildStageSelectNotification
+
+    ; Queue that row to the corresponding BG3 position.
+    JSL AP_QueueStageSelectNotification
+
+    ; REQUEST=1 means row 1 was just queued.
+    LDA.l !AP_NOTIFICATION_REQUEST
+    CMP #$01
+    BEQ .advance_to_row_2
+
+    ; REQUEST=2 means row 2 was just queued.
+    ; The complete notification is now visible.
+    LDA #$00
+    STA.l !AP_NOTIFICATION_REQUEST
+
+    LDA #$B4
+    STA.l !AP_NOTIFICATION_TIMER
+
+    BRA .done
+
+.advance_to_row_2:
+    ; Row 2 will be built on the next stage-select frame.
+    LDA #$02
+    STA.l !AP_NOTIFICATION_REQUEST
+    BRA .done
+
+.update_timer:
+    LDA.l !AP_NOTIFICATION_TIMER
+    BEQ .done
+
+    DEC
+    STA.l !AP_NOTIFICATION_TIMER
+    BNE .done
+
+    ; Timer just reached zero: remove both rows.
+    JSL AP_QueueStageSelectNotificationClear
+
+.done:
+    PLA
+    PLP
+    RTL
+
+; ============================================
+; Build one stage-select AP notification row
+;
+; Input:
+;   AP dialogue text begins at $7F784E.
+;
+; REQUEST determines which row is built:
+;   1 = first text line
+;   2 = text following dialogue control $08
+;
+; Output:
+;   24 BG3 tilemap words at $7F7890.
+;
+; Layout:
+;   [space][up to 22 characters][space]
+;
+; Custom font:
+;   $60       = opaque space
+;   $61-$7A  = A-Z
+;   $7B       = ?
+;   $7C       = -
+;   $7D       = .
+;   $7E       = !
+;   $7F       = '
+;
+; Digits and other unsupported characters
+; currently render as '?'.
+; ============================================
+
+AP_BuildStageSelectNotification:
+    PHP
+    PHB
+
+    REP #$30
+    PHA
+    PHX
+    PHY
+
+    ; Use bank $7F for absolute indexed writes
+    ; to the temporary tilemap row.
+    SEP #$20
+    LDA #$7F
+    PHA
+    PLB
+
+    ; Fill the complete 24-tile row with opaque spaces.
+    REP #$30
+    LDX #$0000
+    LDA #$3060
+
+.fill_bar:
+    STA $7890,x
+    INX
+    INX
+    CPX #$0030
+    BCC .fill_bar
+
+    SEP #$20
+    REP #$10
+
+    ; REQUEST=2 needs the text after the first $08 newline.
+    LDA.l !AP_NOTIFICATION_REQUEST
+    CMP #$02
+    BEQ .find_row_2
+
+    ; Row 1 starts at the first printable character.
+    LDX #$0000
+    BRA .start_copy
+
+.find_row_2:
+    LDX #$0000
+
+.find_newline:
+    ; $7F784E-$7F788F contains $42 bytes.
+    CPX #$0042
+    BCC .newline_in_range
+    JMP .done
+
+.newline_in_range:
+    LDA.l !AP_NOTIFICATION_TEXT_START,x
+
+    CMP #$08
+    BEQ .newline_found
+
+    ; Any other control byte means there is no second line.
+    CMP #$20
+    BCC .done
+
+    INX
+    BRA .find_newline
+
+.newline_found:
+    ; Start immediately after $08.
+    INX
+
+.start_copy:
+    ; Output byte offset $0000 is the left padding tile.
+    LDY #$0002
+
+.copy_character:
+    ; Stop before byte offset $002E.
+    ; $002E is the final/right padding tile.
+    CPY #$002E
+    BCS .done
+
+    ; Do not read beyond the $50-byte dialogue-script partition.
+    CPX #$0042
+    BCS .done
+
+    LDA.l !AP_NOTIFICATION_TEXT_START,x
+
+    ; $08 newline, $07 ending, and all other dialogue
+    ; controls terminate this row.
+    CMP #$20
+    BCC .done
+
+    ; Space.
+    CMP #$20
+    BEQ .space
+
+    ; Uppercase A-Z.
+    CMP #$41
+    BCC .punctuation
+
+    CMP #$5B
+    BCC .uppercase
+
+    ; Lowercase a-z maps directly to our $61-$7A
+    ; custom uppercase graphics.
+    CMP #$61
+    BCC .unsupported
+
+    CMP #$7B
+    BCC .store_tile
+
+    BRA .unsupported
+
+.uppercase:
+    ; ASCII $41-$5A -> custom tiles $61-$7A.
+    CLC
+    ADC #$20
+    BRA .store_tile
+
+.space:
+    LDA #$60
+    BRA .store_tile
+
+.punctuation:
+    CMP #$3F
+    BEQ .question
+
+    CMP #$2D
+    BEQ .hyphen
+
+    CMP #$2E
+    BEQ .period
+
+    CMP #$21
+    BEQ .exclamation
+
+    CMP #$27
+    BEQ .apostrophe
+
+    BRA .unsupported
+
+.question:
+    LDA #$7B
+    BRA .store_tile
+
+.hyphen:
+    LDA #$7C
+    BRA .store_tile
+
+.period:
+    LDA #$7D
+    BRA .store_tile
+
+.exclamation:
+    LDA #$7E
+    BRA .store_tile
+
+.apostrophe:
+    LDA #$7F
+    BRA .store_tile
+
+.unsupported:
+    LDA #$7B
+
+.store_tile:
+    REP #$20
+
+    AND #$00FF
+    ORA #$3000
+
+    ; DBR=$7F, therefore this writes $7F:7890,Y.
+    STA $7890,y
+
+    SEP #$20
+
+    INX
+
+    INY
+    INY
+
+    BRA .copy_character
+
+.done:
+    REP #$30
+    PLY
+    PLX
+    PLA
+
+    PLB
+    PLP
+    RTL
+
+; ============================================
+; Queue one stage-select notification row
+;
+; REQUEST:
+;   1 -> BG3 row 9,  column 4 = $0924
+;   2 -> BG3 row 10, column 4 = $0944
+;
+; Source:
+;   $7F7890, 24 words / $30 bytes.
+; ============================================
+
+AP_QueueStageSelectNotification:
     PHP
     REP #$30
     PHA
@@ -2008,25 +2327,33 @@ AP_QueueStageSelectNotificationTest:
     LDA #$80
     STA.l $7E0500,x
 
-    REP #$20
+    ; Choose destination from the current rendering state.
+    LDA.l !AP_NOTIFICATION_REQUEST
+    CMP #$02
+    BEQ .row_2
 
-    ; BG3 tilemap:
-    ; base = $0800
-    ; row 10, column 6 = $0946
-    LDA #$0946
+    REP #$20
+    LDA #$0924
+    BRA .store_destination
+
+.row_2:
+    REP #$20
+    LDA #$0944
+
+.store_destination:
     STA.l $7E0501,x
 
-    ; "  AP ITEM  " = 11 tilemap words = 22 bytes.
-    LDA #$0016
+    ; 24 tilemap words = $30 bytes.
+    LDA #$0030
     STA.l $7E0503,x
 
-    ; Source data in bank D8.
-    LDA.w #AP_StageSelectNotificationTestData
+    ; Dynamic row workspace at $7F7890.
+    LDA #$7890
     STA.l $7E0505,x
 
     SEP #$20
 
-    LDA #$D8
+    LDA #$7F
     STA.l $7E0507,x
 
     ; Advance queue by one entry.
@@ -2040,6 +2367,86 @@ AP_QueueStageSelectNotificationTest:
     PLA
     PLP
     RTL
+
+; ============================================
+; Clear both stage-select AP notification rows
+; ============================================
+
+AP_QueueStageSelectNotificationClear:
+    PHP
+    REP #$30
+    PHA
+    PHX
+
+    SEP #$30
+
+    ; ============================================
+    ; Row 1: BG3 $0924
+    ; ============================================
+
+    LDA.l $7E00CB
+    TAX
+
+    LDA #$80
+    STA.l $7E0500,x
+
+    REP #$20
+
+    LDA #$0924
+    STA.l $7E0501,x
+
+    LDA #$0030
+    STA.l $7E0503,x
+
+    LDA.w #AP_StageSelectNotificationClearData
+    STA.l $7E0505,x
+
+    SEP #$20
+
+    LDA #$D8
+    STA.l $7E0507,x
+
+    TXA
+    CLC
+    ADC #$08
+    STA.l $7E00CB
+
+    ; ============================================
+    ; Row 2: BG3 $0944
+    ; ============================================
+
+    TAX
+
+    LDA #$80
+    STA.l $7E0500,x
+
+    REP #$20
+
+    LDA #$0944
+    STA.l $7E0501,x
+
+    LDA #$0030
+    STA.l $7E0503,x
+
+    LDA.w #AP_StageSelectNotificationClearData
+    STA.l $7E0505,x
+
+    SEP #$20
+
+    LDA #$D8
+    STA.l $7E0507,x
+
+    TXA
+    CLC
+    ADC #$08
+    STA.l $7E00CB
+
+    REP #$30
+    PLX
+    PLA
+    PLP
+    RTL
+
 ; ============================================
 ; Stage-select AP notification font upload
 ;
@@ -2098,28 +2505,12 @@ AP_QueueStageSelectNotificationFont:
     PLP
     RTL
 
-; ============================================
-; Temporary stage-select notification test data
-; Uses the custom opaque notification font at BG3 tiles $60-$7F.
-; ============================================
-
-AP_StageSelectNotificationTestData:
-    ; "  AP ITEM  "
-    ;
-    ; All characters use the custom opaque font at $60-$7F.
-    ; $3000 = palette 4 + high priority.
-
-    dw $3060 ; opaque space
-    dw $3060 ; opaque space
-    dw $3061 ; A
-    dw $3070 ; P
-    dw $3060 ; opaque space
-    dw $3069 ; I
-    dw $3074 ; T
-    dw $3065 ; E
-    dw $306D ; M
-    dw $3060 ; opaque space
-    dw $3060 ; opaque space
+AP_StageSelectNotificationClearData:
+    ; Restore one 24-tile BG3 row to transparent tile 0.
+    dw $0000,$0000,$0000,$0000,$0000,$0000
+    dw $0000,$0000,$0000,$0000,$0000,$0000
+    dw $0000,$0000,$0000,$0000,$0000,$0000
+    dw $0000,$0000,$0000,$0000,$0000,$0000
 
 AP_InitIntroStageFlag:
     PHP
@@ -4169,13 +4560,13 @@ AP_ConfigStartingBoltsLo:
 AP_ConfigStartingBoltsHi:
     db $00
 AP_ConfigPaidExitUnit:
-    db $00
+    db $01
 AP_ConfigPaidExitUnitCostLo:
-    db $64
+    db $00
 AP_ConfigPaidExitUnitCostHi:
     db $00
 AP_ConfigExitUnitInUnclearedStages:
-    db $00
+    db $01
 AP_ConfigWily4RequirementType:
     db $00
 AP_ConfigWily4WilyStages:
@@ -4197,7 +4588,7 @@ AP_ConfigStartingRobotMasterAccess:
 AP_ConfigCheckpointSelection:
     db $01
 AP_ConfigCheckpointSelectionInUnclearedStages:
-    db $00
+    db $01
 
 ; ============================================
 ; AP ROM auth token
