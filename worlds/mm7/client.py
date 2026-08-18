@@ -28,6 +28,10 @@ MM7_CONTROL_STATE = WRAM_START + 0x0BC6
 MM7_PLAYER_ACTIVE = 0x07
 MM7_CONTROLS_ENABLED = 0x00
 
+MM7_GAME_STATE = WRAM_START + 0x0034
+MM7_STATE_STAGE_SELECT = 0x0132
+MM7_STATE_STAGE = 0x0138
+
 MM7_ROM_HEADER = ROM_START + 0x00FFC0
 ROM_HEADER_SIZE = 0x15
 
@@ -53,6 +57,76 @@ AP_PICKUP_FLAGS = WRAM_START + 0x1FB0
 AP_MEGA_FLAGS = WRAM_START + 0x1FB2
 AP_MISC_FLAGS = WRAM_START + 0x1FB3
 AP_WILY_FLAGS = WRAM_START + 0x1FB4
+
+AP_NOTIFICATION_REQUEST = WRAM_START + 0x1FBF
+AP_NOTIFICATION_TIMER = WRAM_START + 0x1FC0
+AP_NOTIFICATION_INDEX_LO = WRAM_START + 0x1FC1
+AP_NOTIFICATION_INDEX_HI = WRAM_START + 0x1FC2
+
+# $7F7840 = $17840 bytes after $7E0000.
+AP_NOTIFICATION_BUFFER = WRAM_START + 0x17840
+AP_NOTIFICATION_BUFFER_SIZE = 0x50
+AP_NOTIFICATION_HEADER = bytes([
+    0x02, 0x02, 0x03, 0x00,
+    0x02, 0x10, 0x20, 0x0A,
+    0xC6, 0x00, 0x01, 0x20,
+    0x0E, 0x08,
+])
+
+AP_NOTIFICATION_END = bytes([
+    0x07, 0x3C,
+    0x05, 0x06,
+    0x0B, 0x00,
+])
+
+AP_NOTIFICATION_LINE_LENGTH = 22
+
+
+def sanitize_notification_line(text: str) -> str:
+    text = text.upper()
+
+    # Characters currently supported by the opaque stage-select font.
+    allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ?-.!'"
+
+    sanitized = "".join(
+        character if character in allowed else "?"
+        for character in text
+    )
+
+    return sanitized[:AP_NOTIFICATION_LINE_LENGTH]
+
+def get_notification_source_line(ctx, network_item) -> str:
+    # Archipelago represents precollected/start-inventory items as:
+    #   location = -2
+    #   player   = 0
+    if network_item.location == -2 and network_item.player == 0:
+        return "STARTING ITEM"
+
+    # Item found in this player's own world.
+    if network_item.player == ctx.slot:
+        return "FROM YOUR WORLD"
+
+    # Item found by another player.
+    player_name = ctx.player_names.get(
+        network_item.player,
+        "ARCHIPELAGO",
+    )
+
+    return f"FROM {player_name}"
+
+def build_notification_payload(item_name: str, source_line: str) -> bytes:
+    item_line = sanitize_notification_line(item_name)
+    source_line = sanitize_notification_line(source_line)
+
+    script = (
+        AP_NOTIFICATION_HEADER
+        + item_line.encode("ascii")
+        + bytes([0x08])
+        + source_line.encode("ascii")
+        + AP_NOTIFICATION_END
+    )
+
+    return script.ljust(AP_NOTIFICATION_BUFFER_SIZE, b"\x00")
 
 BOSS_FLAG_TO_ITEM_LOCATION: Dict[int, str] = {
     0x01: names.freeze_man_defeated_item,
@@ -425,7 +499,133 @@ class MM7SNIClient(SNIClient):
             await ctx.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
             ctx.finished_game = True
 
-        # 2. Deliver received AP items to the ROM-side AP_CheckItemReceive mailbox.
+        # 2. Display pending received-item notifications.
+        #
+        # Item delivery and notification display use separate indices:
+        #
+        #   AP_RECV_INDEX
+        #       Number of received AP items already granted by the ROM.
+        #
+        #   AP_NOTIFICATION_INDEX
+        #       Number of granted items whose notification has finished displaying.
+        #
+        # Stage select and active gameplay use different notification renderers.
+        game_state_raw = await snes_read(ctx, MM7_GAME_STATE, 2)
+        notification_state_raw = await snes_read(ctx, AP_NOTIFICATION_REQUEST, 2)
+        notification_index_raw = await snes_read(ctx, AP_NOTIFICATION_INDEX_LO, 2)
+        notification_recv_index_raw = await snes_read(ctx, AP_RECV_INDEX_LO, 2)
+
+        notification_health_raw = await snes_read(ctx, MM7_HEALTH, 1)
+        notification_player_state_raw = await snes_read(ctx, MM7_PLAYER_STATE, 1)
+        notification_control_state_raw = await snes_read(ctx, MM7_CONTROL_STATE, 1)
+
+        if (
+            game_state_raw is not None
+            and notification_state_raw is not None
+            and notification_index_raw is not None
+            and notification_recv_index_raw is not None
+            and notification_health_raw is not None
+            and notification_player_state_raw is not None
+            and notification_control_state_raw is not None
+        ):
+            game_state = game_state_raw[0] | (game_state_raw[1] << 8)
+
+            notification_request = notification_state_raw[0]
+            notification_timer = notification_state_raw[1]
+
+            notification_index = (
+                notification_index_raw[0]
+                | (notification_index_raw[1] << 8)
+            )
+
+            notification_recv_index = (
+                notification_recv_index_raw[0]
+                | (notification_recv_index_raw[1] << 8)
+            )
+
+            notification_pending = (
+                notification_index < notification_recv_index
+                and notification_index < len(ctx.items_received)
+            )
+
+            notification_request_idle = notification_request == 0
+
+            gameplay_ready = (
+                game_state == MM7_STATE_STAGE
+                and notification_player_state_raw[0] == MM7_PLAYER_ACTIVE
+                and notification_control_state_raw[0] == MM7_CONTROLS_ENABLED
+                and notification_health_raw[0] > 0
+            )
+
+            if notification_pending and notification_request_idle:
+                next_notification_request = None
+                clear_notification_timer = False
+
+                if (
+                    game_state == MM7_STATE_STAGE_SELECT
+                    and notification_timer == 0
+                ):
+                    # BG3 stage-select renderer.
+                    next_notification_request = 0x01
+
+                elif gameplay_ready:
+                    # Native gameplay dialogue renderer.
+                    next_notification_request = 0x03
+
+                    # If we left stage select before its notification timer
+                    # finished, abandon that old display timer. The same pending
+                    # notification will now be shown through the gameplay renderer.
+                    clear_notification_timer = notification_timer != 0
+
+                if next_notification_request is not None:
+                    notification_item = ctx.items_received[notification_index]
+
+                    try:
+                        notification_item_name = ctx.item_names.lookup_in_game(
+                            notification_item.item
+                        )
+                    except Exception:
+                        snes_logger.warning(
+                            "Could not resolve notification item id %s",
+                            notification_item.item,
+                        )
+                        return
+
+                    source_line = get_notification_source_line(
+                        ctx,
+                        notification_item,
+                    )
+
+                    notification_payload = build_notification_payload(
+                        notification_item_name,
+                        source_line,
+                    )
+
+                    if clear_notification_timer:
+                        snes_buffered_write(
+                            ctx,
+                            AP_NOTIFICATION_TIMER,
+                            b"\x00",
+                        )
+
+                    # Always write a fresh copy because $7F7840 can be
+                    # overwritten during transitions.
+                    snes_buffered_write(
+                        ctx,
+                        AP_NOTIFICATION_BUFFER,
+                        notification_payload,
+                    )
+
+                    # Set REQUEST last.
+                    snes_buffered_write(
+                        ctx,
+                        AP_NOTIFICATION_REQUEST,
+                        bytes([next_notification_request]),
+                    )
+
+                    await snes_flush_writes(ctx)
+
+        # 3. Deliver received AP items to the ROM-side AP_CheckItemReceive mailbox.
         execute_flag = await snes_read(ctx, AP_EXECUTE_FLAG, 1)
         recv_index_raw = await snes_read(ctx, AP_RECV_INDEX_LO, 2)
         if execute_flag is None or recv_index_raw is None:

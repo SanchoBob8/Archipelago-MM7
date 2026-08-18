@@ -43,6 +43,8 @@ hirom
 !AP_DRAW_CHECKPOINT_NUMBER  = $7E1FBE
 !AP_NOTIFICATION_REQUEST    = $7E1FBF
 !AP_NOTIFICATION_TIMER      = $7E1FC0
+!AP_NOTIFICATION_INDEX_LO = $7E1FC1
+!AP_NOTIFICATION_INDEX_HI = $7E1FC2
 
 ; AP notification WRAM block.
 ; $7F7840-$7F78BF provisionally reserved for AP.
@@ -64,6 +66,14 @@ hirom
 ; 24 tilemap words = $30 bytes.
 !AP_STAGE_SELECT_NOTIFICATION_ROW      = $7F7890
 !AP_STAGE_SELECT_NOTIFICATION_ROW_SIZE = $0030
+
+; Gameplay notification safety checks.
+!MM7_HEALTH           = $7E0C2E
+!MM7_PLAYER_STATE     = $7E0BD7
+!MM7_CONTROL_STATE    = $7E0BC6
+
+!MM7_PLAYER_ACTIVE    = $07
+!MM7_CONTROLS_ENABLED = $00
 
 ; ============================================
 ; Selected checkpoint application
@@ -828,12 +838,103 @@ org $C034DF
 ; Do not move them to bank D8 without adding wrappers.
 ; ============================================
 
+; ============================================
+; Gameplay AP notification updater
+;
+; Uses the small free-space region immediately
+; before the main C0 AP helper block.
+; ============================================
+
+org $C07B96
+
+AP_UpdateGameplayNotification:
+    PHP
+    SEP #$20
+    PHA
+
+    LDA.l !AP_NOTIFICATION_REQUEST
+
+    CMP #$03
+    BEQ .try_start
+
+    CMP #$04
+    BEQ .wait_for_completion
+
+    BRA .done
+
+.try_start:
+    ; Use the same active-gameplay definition as DeathLink.
+    ; These conditions are a stronger safety gate than $0034,
+    ; which can briefly report stage state during loading.
+    LDA.l !MM7_PLAYER_STATE
+    CMP #!MM7_PLAYER_ACTIVE
+    BNE .cancel_request
+
+    LDA.l !MM7_CONTROL_STATE
+    CMP #!MM7_CONTROLS_ENABLED
+    BNE .cancel_request
+
+    LDA.l !MM7_HEALTH
+    BEQ .cancel_request
+
+    ; The notification buffer is fresh and gameplay is safe.
+    LDA #$1D
+    JSL $C2CE03
+
+    ; $C2CE03 initializes the dialogue state, including $F2.
+    LDA #$04
+    STA.l !AP_NOTIFICATION_REQUEST
+
+    BRA .done
+
+.cancel_request:
+    ; Do NOT increment the notification index.
+    ;
+    ; The text buffer may become invalid during a transition,
+    ; so force the client to write a fresh copy before retrying.
+    LDA #$00
+    STA.l !AP_NOTIFICATION_REQUEST
+    BRA .done
+
+.wait_for_completion:
+    ; Our dialogue script executes control $0B at its end,
+    ; which increments $F2.
+    LDA.l $7E00F2
+    BEQ .done
+
+    ; This notification completed.
+    LDA #$00
+    STA.l !AP_NOTIFICATION_REQUEST
+
+    ; Advance the 16-bit notification index.
+    LDA.l !AP_NOTIFICATION_INDEX_LO
+    INC
+    STA.l !AP_NOTIFICATION_INDEX_LO
+    BNE .done
+
+    LDA.l !AP_NOTIFICATION_INDEX_HI
+    INC
+    STA.l !AP_NOTIFICATION_INDEX_HI
+
+.done:
+    PLA
+    PLP
+    RTL
+
+assert pc() <= $C07C00
+
+
+; ============================================
+; Small C0-bank helper routines
+; ============================================
+
 org $C07C00
 
 AP_MainLoopHook:
     JSR $315A
     INC $00D1
     JSL AP_CheckItemReceive
+    JSL AP_UpdateGameplayNotification
     JSL AP_UpdateVanillaWilyAvailability
     RTL
 
@@ -848,10 +949,10 @@ AP_StageSelectInitHook:
 
     SEP #$20
 
-    ; BG3 is used for AP notifications.
-    ; Disable color math on BG3 so the notification background
-    ; remains opaque over the stage-select cursor sprites.
-    LDA #$7B
+    ; Normal stage-select color math.
+    ; BG3 must participate so cleared portraits retain
+    ; their vanilla darkened appearance.
+    LDA #$7F
     STA.l $7E00BD
 
     JSL AP_QueueStageSelectNotificationFont
@@ -1653,7 +1754,7 @@ AP_ClearRuntime:
 .clear_loop:
     STA.l !AP_RUNTIME_START,x
     INX
-    CPX #$20
+    CPX #$22
     BNE .clear_loop
 
     ; Make the precollected starting stage available before the first
@@ -1956,10 +2057,7 @@ AP_CheckItemReceive:
     STA.l !AP_RECV_INDEX_HI
 
 .clear_flag:
-    ; Temporary gameplay notification test.
-    LDA #$1D
-    JSL $C2CE03
-
+    ; Item delivery is independent from notification display.
     LDA #$00
     STA.l !AP_EXECUTE_FLAG
 
@@ -2030,7 +2128,7 @@ AP_UpdateStageSelectNotification:
     BEQ .update_timer
 
     CMP #$01
-    BEQ .render_row
+    BEQ .start_notification
 
     CMP #$02
     BEQ .render_row
@@ -2039,6 +2137,14 @@ AP_UpdateStageSelectNotification:
     LDA #$00
     STA.l !AP_NOTIFICATION_REQUEST
     BRA .done
+
+.start_notification:
+    ; Temporarily remove BG3 from color math so the AP
+    ; notification panel is fully opaque.
+    LDA #$7B
+    STA.l $7E00BD
+
+    BRA .render_row
 
 .render_row:
     ; Build the row corresponding to REQUEST 1 or 2.
@@ -2078,6 +2184,22 @@ AP_UpdateStageSelectNotification:
 
     ; Timer just reached zero: remove both rows.
     JSL AP_QueueStageSelectNotificationClear
+
+    ; Restore normal BG3 color math now that the opaque
+    ; AP notification is finished.
+    LDA #$7F
+    STA.l $7E00BD
+
+    ; This notification has finished displaying.
+    ; Advance the 16-bit notification index.
+    LDA.l !AP_NOTIFICATION_INDEX_LO
+    INC
+    STA.l !AP_NOTIFICATION_INDEX_LO
+    BNE .done
+
+    LDA.l !AP_NOTIFICATION_INDEX_HI
+    INC
+    STA.l !AP_NOTIFICATION_INDEX_HI
 
 .done:
     PLA
