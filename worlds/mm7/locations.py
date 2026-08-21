@@ -125,6 +125,111 @@ location_table: Dict[str, MM7LocationData] = {
     names.mega_health_capsule_loc:   MM7LocationData(0x31, SPRING_MAN),
 
     # ========================================================
+    # Pickupsanity
+    #
+    # Codes $40-$87 correspond directly to ROM pickup
+    # indices 0-71:
+    #
+    #   location code = $40 + pickup index
+    # ========================================================
+
+    # Spring Man — 0-6
+    names.spring_man_large_bolt:          MM7LocationData(0x40, SPRING_MAN),
+    names.spring_man_large_health_1:      MM7LocationData(0x41, SPRING_MAN),
+    names.spring_man_one_up_1:            MM7LocationData(0x42, SPRING_MAN),
+    names.spring_man_large_weapon_energy: MM7LocationData(0x43, SPRING_MAN),
+    names.spring_man_one_up_2:            MM7LocationData(0x44, SPRING_MAN),
+    names.spring_man_e_tank:              MM7LocationData(0x45, SPRING_MAN),
+    names.spring_man_large_health_2:      MM7LocationData(0x46, SPRING_MAN),
+
+    # Freeze Man — 7-9
+    names.freeze_man_large_weapon_energy: MM7LocationData(0x47, FREEZE_MAN),
+    names.freeze_man_large_health:        MM7LocationData(0x48, FREEZE_MAN),
+    names.freeze_man_e_tank:              MM7LocationData(0x49, FREEZE_MAN),
+
+    # Slash Man — 10-12
+    names.slash_man_large_health_1: MM7LocationData(0x4A, SLASH_MAN),
+    names.slash_man_e_tank:         MM7LocationData(0x4B, SLASH_MAN),
+    names.slash_man_large_health_2: MM7LocationData(0x4C, SLASH_MAN),
+
+    # Cloud Man — 13-17
+    names.cloud_man_large_health_1: MM7LocationData(0x4D, CLOUD_MAN),
+    names.cloud_man_one_up_1:       MM7LocationData(0x4E, CLOUD_MAN),
+    names.cloud_man_one_up_2:       MM7LocationData(0x4F, CLOUD_MAN),
+    names.cloud_man_large_health_2: MM7LocationData(0x50, CLOUD_MAN),
+    names.cloud_man_large_bolt:     MM7LocationData(0x51, CLOUD_MAN),
+
+    # Junk Man — 18-21
+    names.junk_man_large_bolt:          MM7LocationData(0x52, JUNK_MAN),
+    names.junk_man_large_health_1:      MM7LocationData(0x53, JUNK_MAN),
+    names.junk_man_one_up:              MM7LocationData(0x54, JUNK_MAN),
+    names.junk_man_large_weapon_energy: MM7LocationData(0x55, JUNK_MAN),
+
+    # Turbo Man — 22-25
+    names.turbo_man_large_health_1: MM7LocationData(0x56, TURBO_MAN),
+    names.turbo_man_one_up:         MM7LocationData(0x57, TURBO_MAN),
+    names.turbo_man_large_health_2: MM7LocationData(0x58, TURBO_MAN),
+    names.turbo_man_e_tank:         MM7LocationData(0x59, TURBO_MAN),
+
+    # Burst Man — 26-31
+    names.burst_man_one_up_1:            MM7LocationData(0x5A, BURST_MAN),
+    names.burst_man_e_tank:              MM7LocationData(0x5B, BURST_MAN),
+    names.burst_man_one_up_2:            MM7LocationData(0x5C, BURST_MAN),
+    names.burst_man_large_health_1:      MM7LocationData(0x5D, BURST_MAN),
+    names.burst_man_large_weapon_energy: MM7LocationData(0x5E, BURST_MAN),
+    names.burst_man_large_health_2:      MM7LocationData(0x5F, BURST_MAN),
+
+    # Shade Man — 32-36
+    names.shade_man_large_bolt:     MM7LocationData(0x60, SHADE_MAN),
+    names.shade_man_large_health_1: MM7LocationData(0x61, SHADE_MAN),
+    names.shade_man_one_up_1:       MM7LocationData(0x62, SHADE_MAN),
+    names.shade_man_large_health_2: MM7LocationData(0x63, SHADE_MAN),
+    names.shade_man_one_up_2:       MM7LocationData(0x64, SHADE_MAN),
+
+    # Wily 1 — 37-42
+    names.wily_1_large_bolt:          MM7LocationData(0x65, WILY_1),
+    names.wily_1_large_weapon_energy: MM7LocationData(0x66, WILY_1),
+    names.wily_1_one_up:              MM7LocationData(0x67, WILY_1),
+    names.wily_1_large_health_1:      MM7LocationData(0x68, WILY_1),
+    names.wily_1_large_health_2:      MM7LocationData(0x69, WILY_1),
+    names.wily_1_e_tank:              MM7LocationData(0x6A, WILY_1),
+
+    # Wily 2 — 43-52
+    names.wily_2_large_bolt:          MM7LocationData(0x6B, WILY_2),
+    names.wily_2_large_health_1:      MM7LocationData(0x6C, WILY_2),
+    names.wily_2_one_up:              MM7LocationData(0x6D, WILY_2),
+    names.wily_2_large_health_2:      MM7LocationData(0x6E, WILY_2),
+    names.wily_2_small_health_1:      MM7LocationData(0x6F, WILY_2),
+    names.wily_2_small_health_2:      MM7LocationData(0x70, WILY_2),
+    names.wily_2_small_health_3:      MM7LocationData(0x71, WILY_2),
+    names.wily_2_large_health_3:      MM7LocationData(0x72, WILY_2),
+    names.wily_2_large_weapon_energy: MM7LocationData(0x73, WILY_2),
+    names.wily_2_large_health_4:      MM7LocationData(0x74, WILY_2),
+
+    # Wily 3 — 53-63
+    names.wily_3_large_bolt_1:   MM7LocationData(0x75, WILY_3),
+    names.wily_3_large_bolt_2:   MM7LocationData(0x76, WILY_3),
+    names.wily_3_large_health_1: MM7LocationData(0x77, WILY_3),
+    names.wily_3_one_up_1:       MM7LocationData(0x78, WILY_3),
+    names.wily_3_one_up_2:       MM7LocationData(0x79, WILY_3),
+    names.wily_3_e_tank_1:       MM7LocationData(0x7A, WILY_3),
+    names.wily_3_s_tank:         MM7LocationData(0x7B, WILY_3),
+    names.wily_3_w_tank:         MM7LocationData(0x7C, WILY_3),
+    names.wily_3_one_up_3:       MM7LocationData(0x7D, WILY_3),
+    names.wily_3_large_health_2: MM7LocationData(0x7E, WILY_3),
+    names.wily_3_e_tank_2:       MM7LocationData(0x7F, WILY_3),
+
+    # Wily 4 — 64-71
+    names.wily_4_large_bolt_1: MM7LocationData(0x80, WILY_4),
+    names.wily_4_large_bolt_2: MM7LocationData(0x81, WILY_4),
+    names.wily_4_large_bolt_3: MM7LocationData(0x82, WILY_4),
+    names.wily_4_w_tank:       MM7LocationData(0x83, WILY_4),
+    names.wily_4_one_up:        MM7LocationData(0x84, WILY_4),
+    names.wily_4_large_bolt_4: MM7LocationData(0x85, WILY_4),
+    names.wily_4_large_bolt_5: MM7LocationData(0x86, WILY_4),
+    names.wily_4_large_bolt_6: MM7LocationData(0x87, WILY_4),
+
+    # ========================================================
     # Goal
     # ========================================================
     names.wily_capsule: MM7LocationData(None, WILY_4),
@@ -204,6 +309,104 @@ wily_boss_item_locations = [
     names.guts_man_g_defeated_item,
     names.gamerizer_defeated_item,
     names.hannya_ned_defeated_item,
+]
+
+pickupsanity_locations = [
+    # Spring Man — 0-6
+    names.spring_man_large_bolt,
+    names.spring_man_large_health_1,
+    names.spring_man_one_up_1,
+    names.spring_man_large_weapon_energy,
+    names.spring_man_one_up_2,
+    names.spring_man_e_tank,
+    names.spring_man_large_health_2,
+
+    # Freeze Man — 7-9
+    names.freeze_man_large_weapon_energy,
+    names.freeze_man_large_health,
+    names.freeze_man_e_tank,
+
+    # Slash Man — 10-12
+    names.slash_man_large_health_1,
+    names.slash_man_e_tank,
+    names.slash_man_large_health_2,
+
+    # Cloud Man — 13-17
+    names.cloud_man_large_health_1,
+    names.cloud_man_one_up_1,
+    names.cloud_man_one_up_2,
+    names.cloud_man_large_health_2,
+    names.cloud_man_large_bolt,
+
+    # Junk Man — 18-21
+    names.junk_man_large_bolt,
+    names.junk_man_large_health_1,
+    names.junk_man_one_up,
+    names.junk_man_large_weapon_energy,
+
+    # Turbo Man — 22-25
+    names.turbo_man_large_health_1,
+    names.turbo_man_one_up,
+    names.turbo_man_large_health_2,
+    names.turbo_man_e_tank,
+
+    # Burst Man — 26-31
+    names.burst_man_one_up_1,
+    names.burst_man_e_tank,
+    names.burst_man_one_up_2,
+    names.burst_man_large_health_1,
+    names.burst_man_large_weapon_energy,
+    names.burst_man_large_health_2,
+
+    # Shade Man — 32-36
+    names.shade_man_large_bolt,
+    names.shade_man_large_health_1,
+    names.shade_man_one_up_1,
+    names.shade_man_large_health_2,
+    names.shade_man_one_up_2,
+
+    # Wily 1 — 37-42
+    names.wily_1_large_bolt,
+    names.wily_1_large_weapon_energy,
+    names.wily_1_one_up,
+    names.wily_1_large_health_1,
+    names.wily_1_large_health_2,
+    names.wily_1_e_tank,
+
+    # Wily 2 — 43-52
+    names.wily_2_large_bolt,
+    names.wily_2_large_health_1,
+    names.wily_2_one_up,
+    names.wily_2_large_health_2,
+    names.wily_2_small_health_1,
+    names.wily_2_small_health_2,
+    names.wily_2_small_health_3,
+    names.wily_2_large_health_3,
+    names.wily_2_large_weapon_energy,
+    names.wily_2_large_health_4,
+
+    # Wily 3 — 53-63
+    names.wily_3_large_bolt_1,
+    names.wily_3_large_bolt_2,
+    names.wily_3_large_health_1,
+    names.wily_3_one_up_1,
+    names.wily_3_one_up_2,
+    names.wily_3_e_tank_1,
+    names.wily_3_s_tank,
+    names.wily_3_w_tank,
+    names.wily_3_one_up_3,
+    names.wily_3_large_health_2,
+    names.wily_3_e_tank_2,
+
+    # Wily 4 — 64-71
+    names.wily_4_large_bolt_1,
+    names.wily_4_large_bolt_2,
+    names.wily_4_large_bolt_3,
+    names.wily_4_w_tank,
+    names.wily_4_one_up,
+    names.wily_4_large_bolt_4,
+    names.wily_4_large_bolt_5,
+    names.wily_4_large_bolt_6,
 ]
 
 active_locations = (
@@ -352,6 +555,8 @@ wily_boss_item_location_set: Set[str] = {
     names.hannya_ned_defeated_item,
 }
 
+pickupsanity_location_set: Set[str] = set(pickupsanity_locations)
+
 item_name_groups: Dict[str, Set[str]] = {
     "Boss Defeats": main_boss_locations | fortress_boss_event_locations,
     "Boss Items": main_boss_item_locations | fortress_boss_item_locations,
@@ -360,6 +565,7 @@ item_name_groups: Dict[str, Set[str]] = {
     "Rush Items": rush_item_locations,
     "Unique Upgrades": unique_upgrade_locations,
     "Mega Items": mega_items_locations,
+    "Pickupsanity": pickupsanity_location_set,
     "Goal": goal_locations,
 }
 

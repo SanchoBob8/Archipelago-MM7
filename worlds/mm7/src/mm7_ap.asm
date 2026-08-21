@@ -41,6 +41,84 @@ hirom
 !AP_SELECTED_CHECKPOINT     = $7E1FBC
 !AP_LAST_STAGE_SELECT_ID    = $7E1FBD
 !AP_DRAW_CHECKPOINT_NUMBER  = $7E1FBE
+; Set to 1 when the current tracked pickup was a new AP check.
+!AP_PICKUP_NEW_CHECK = $7E1FC0
+
+; 9 bytes = 72 Pickupsanity locations maximum.
+!AP_PICKUP_CHECKS = $7E1FC1 ; $7E1FC1-$7E1FC9
+
+org $C25664
+    JSL AP_OneUpPickupGrantHook
+    NOP
+assert pc() == $C25669
+
+org $C256BA
+    JML AP_ETankPickupGrantHook
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+assert pc() == $C256C6
+
+org $C256C6
+    JML AP_WTankPickupGrantHook
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+assert pc() == $C256D2
+
+org $C256D2
+    JML AP_STankPickupGrantHook
+    NOP
+    NOP
+    NOP
+    NOP
+assert pc() == $C256DA
+
+; ============================================
+; Pickupsanity capsule/bolt cleanup hooks
+;
+; These five call sites are specific to:
+;   - Health capsules
+;   - Weapon Energy capsules
+;   - Bolts
+;
+; Vanilla at each address:
+;   JSL $C108EF
+; ============================================
+
+org $C254C0
+    JSL AP_PickupCleanupHook
+assert pc() == $C254C4
+
+org $C2550C
+    JSL AP_PickupCleanupHook
+assert pc() == $C25510
+
+org $C255C0
+    JSL AP_PickupCleanupHook
+assert pc() == $C255C4
+
+org $C255F6
+    JSL AP_PickupCleanupHook
+assert pc() == $C255FA
+
+org $C25640
+    JSL AP_PickupCleanupHook
+assert pc() == $C25644
+
+org $C256F1
+    JSL AP_TrackedPickupMarkHook
+assert pc() == $C256F5
 
 ; ============================================
 ; Selected checkpoint application
@@ -238,9 +316,31 @@ org $C00DBC
     NOP
 
 org $C047D9
+    ; Check ownership / paid Exit Unit availability.
     JSL AP_CheckExitUnitAccess
+
+    ; Not available or insufficient bolts -> vanilla failure.
     db $90, $28 ; BCC $C04807
+
+    ; AP handles stage eligibility itself, including Wily stages.
+    JML AP_ExitUnitMedalCheck
+
+    ; Replace the remaining vanilla stage/medal checks through $C047EF.
     NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+assert pc() == $C047F0
 
 ; ============================================
 ; Paid Exit Unit inventory display
@@ -548,10 +648,6 @@ org $C14D8D
     NOP
     NOP
 
-org $C047EB
-    JML AP_ExitUnitMedalCheck
-    NOP
-
 ; ============================================
 ; Energy Balancer spawn/check AP location hook
 ; $0BA4 bit $80 -> AP_ITEM_FLAGS bit $80
@@ -755,6 +851,89 @@ org $C03504
 org $C034DF
     JML AP_NormalStageEntryGateHook
     NOP
+
+org $C07B96
+
+AP_PickupCleanupHook:
+    ; The original $C108EF cleanup preserves these registers,
+    ; so our wrapper must do the same.
+    PHP
+    REP #$30
+    PHA
+    PHX
+    PHY
+
+    ; X = byte offset into AP_PickupTable.
+    LDX #$0000
+
+.lookup:
+    ; Entry +0 = 8-bit stage ID.
+    SEP #$20
+    LDA.l AP_PickupTable,x
+
+    ; $FF terminates the table.
+    CMP #$FF
+    BEQ .done
+
+    ; Match current stage.
+    LDA.l $7E0B73
+    CMP.l AP_PickupTable,x
+    BNE .next
+
+    ; Entry +1/+2 = 16-bit vanilla source pointer.
+    REP #$20
+    LDA $0C
+    CMP.l AP_PickupTable+1,x
+    BNE .next
+
+    ; Entry +4 = 8-bit bit mask.
+    SEP #$20
+    LDA.l AP_PickupTable+4,x
+
+    ; Preserve the mask in 16-bit Y.
+    REP #$20
+    AND #$00FF
+    TAY
+
+    ; Entry +3 = 8-bit AP_PICKUP_CHECKS byte offset.
+    SEP #$20
+    LDA.l AP_PickupTable+3,x
+
+    REP #$20
+    AND #$00FF
+    TAX
+
+    ; Set the corresponding AP location bit.
+    SEP #$20
+    TYA
+    ORA.l !AP_PICKUP_CHECKS,x
+    STA.l !AP_PICKUP_CHECKS,x
+
+    BRA .done
+
+.next:
+    ; Each compressed table entry is 5 bytes.
+    REP #$20
+    TXA
+    CLC
+    ADC #$0005
+    TAX
+    BRA .lookup
+
+.done:
+    ; Restore the exact register widths required for the
+    ; 16-bit values saved above.
+    REP #$30
+    PLY
+    PLX
+    PLA
+    PLP
+
+    ; Original vanilla cleanup.
+    JSL $C108EF
+    RTL
+
+assert pc() <= $C07C00
 
 ; ============================================
 ; Small C0-bank helper routines
@@ -1314,6 +1493,69 @@ AP_HandleCheckpointSelection:
     PLP
     RTS
 
+
+; ============================================
+; Stage exit AP-only boss gate
+; Kept in C0 to free space in the D8 AP block.
+; ============================================
+
+AP_StageExitAPOnlyBossGate:
+    PHP
+    SEP #$30
+    PHX
+
+    ; If this stage exit came from Exit Unit,
+    ; do not send the boss reward check.
+    LDA.l !AP_EXIT_UNIT_USED
+    BEQ .boss_defeated
+
+    ; Wily stages need to keep AP_EXIT_UNIT_USED set
+    ; until AP_WilyStageClearCheck, so it can distinguish
+    ; an Exit Unit departure from a real stage clear.
+    LDA.l $7E0B73
+
+    CMP #$0A
+    BCC .normal_exit_unit
+
+    CMP #$0E
+    BCS .normal_exit_unit
+
+    ; Wily 1-4 ($0A-$0D):
+    ; preserve AP_EXIT_UNIT_USED for the Wily clear hook.
+    PLX
+    PLP
+    JML $C00DDC
+
+
+.normal_exit_unit:
+    ; Normal Robot Master stage:
+    ; this flag has served its purpose, so clear it now.
+    LDA #$00
+    STA.l !AP_EXIT_UNIT_USED
+
+    PLX
+    PLP
+    JML $C00DDC
+
+
+.boss_defeated:
+    ; X is stage_id * 2 here.
+    ; Record the boss as defeated for AP.
+    TXA
+    LSR
+    TAX
+
+    LDA.l AP_BossBitMaskTable,x
+    ORA.l !AP_BOSS_FLAGS
+    STA.l !AP_BOSS_FLAGS
+
+    PLX
+    PLP
+
+    ; Skip vanilla weapon-get / boss weapon grant.
+    JML $C00DDC
+
+
 assert pc() <= $C07EC0
 
 org $C07EC0
@@ -1580,7 +1822,7 @@ AP_ClearRuntime:
 .clear_loop:
     STA.l !AP_RUNTIME_START,x
     INX
-    CPX #$20
+    CPX #$29
     BNE .clear_loop
 
     ; Make the precollected starting stage available before the first
@@ -2086,39 +2328,6 @@ AP_ProtoShieldRewardCheck:
     ; Skip vanilla Proto Shield grant and continue post-fight flow.
     JML $C37233
 
-AP_StageExitAPOnlyBossGate:
-    PHP
-    SEP #$30
-    PHX
-
-    ; If this stage exit came from Exit Unit, do not send the boss reward check.
-    LDA.l !AP_EXIT_UNIT_USED
-    BEQ .boss_defeated
-
-    LDA #$00
-    STA.l !AP_EXIT_UNIT_USED
-
-    PLX
-    PLP
-    JML $C00DDC
-
-.boss_defeated:
-    ; X is stage_id * 2 here.
-    ; Record the boss as defeated for AP.
-    TXA
-    LSR
-    TAX
-
-    LDA.l AP_BossBitMaskTable,x
-    ORA.l !AP_BOSS_FLAGS
-    STA.l !AP_BOSS_FLAGS
-
-    PLX
-    PLP
-
-    ; Skip vanilla weapon-get / boss weapon grant.
-    JML $C00DDC
-
 AP_WilyUnlockGate:
     ; Wily access is item-gated by AP Wily Access Codes.
     ; Do not unlock vanilla Wily just because all 8 Robot Masters are defeated.
@@ -2575,22 +2784,69 @@ AP_ExitUnitMedalCheck:
     SEP #$30
     PHX
 
-    ; If option is enabled, allow Exit Unit even if the stage is not cleared.
+    ; If option is enabled, allow Exit Unit even if
+    ; the current stage has not been cleared.
     LDA.l AP_ConfigExitUnitInUnclearedStages
     BNE .has_medal
 
-    ; X is the vanilla offset into $0B83 table.
-    ; Convert $02,$04,...,$10 into boss index 1..8.
-    TXA
-    LSR
+    ; Use the actual current stage ID rather than the
+    ; vanilla $0B83 offset in X.
+    ;
+    ; Robot Masters:
+    ;   $01-$08
+    ;
+    ; Wily:
+    ;   $0A = Wily 1
+    ;   $0B = Wily 2
+    ;   $0C = Wily 3
+    ;   $0D = Wily 4
+    LDA.l $7E0B73
+
+    CMP #$01
+    BCC .no_medal
+
+    CMP #$09
+    BCC .check_robot_master
+
+    CMP #$0A
+    BCC .no_medal
+
+    CMP #$0E
+    BCC .check_wily
+
+    ; Any other stage is not considered cleared here.
+    BRA .no_medal
+
+
+.check_robot_master:
+    ; Stage ID 1-8 maps directly to AP_BossBitMaskTable.
     TAX
 
     LDA.l AP_BossBitMaskTable,x
     AND.l !AP_BOSS_FLAGS
     BEQ .no_medal
 
+    BRA .has_medal
+
+
+.check_wily:
+    ; Convert:
+    ;   $0A -> index 0 -> bit $01
+    ;   $0B -> index 1 -> bit $02
+    ;   $0C -> index 2 -> bit $04
+    ;   $0D -> index 3 -> bit $08
+    SEC
+    SBC #$0A
+    TAX
+
+    LDA.l AP_BitMaskTable,x
+    AND.l !AP_WILY_FLAGS
+    BEQ .no_medal
+
+
 .has_medal:
-    ; Mark that this stage exit came from Exit Unit, not boss defeat.
+    ; Mark that this stage exit came from Exit Unit,
+    ; not boss defeat.
     LDA #$01
     STA.l !AP_EXIT_UNIT_USED
 
@@ -2602,18 +2858,23 @@ AP_ExitUnitMedalCheck:
     STA.l !AP_EXIT_UNIT_PAID_PENDING
 
     REP #$20
+
     LDA.l $7E0BA6
     SEC
     SBC.l AP_ConfigPaidExitUnitCostLo
     STA.l $7E0BA6
+
     SEP #$20
+
 
 .finish_success:
     PLX
     PLP
     JML $C047F0
 
+
 .no_medal:
+    ; Failed activation must never charge the player.
     LDA #$00
     STA.l !AP_EXIT_UNIT_PAID_PENDING
 
@@ -2874,6 +3135,29 @@ AP_WilyStageClearCheck:
     PHP
     SEP #$20
 
+    ; An Exit Unit departure is NOT a Wily stage clear.
+    ;
+    ; AP_StageExitAPOnlyBossGate deliberately preserves
+    ; this flag for Wily stages so we can detect it here.
+    LDA.l !AP_EXIT_UNIT_USED
+    BEQ .real_stage_clear
+
+    ; Consume the Exit Unit marker.
+    LDA #$00
+    STA.l !AP_EXIT_UNIT_USED
+
+    ; Clear the current selection so stage select can
+    ; choose/prefer a Wily stage again.
+    STA.l !AP_SELECTED_WILY_STAGE
+
+    PLP
+
+    ; Return to stage select without setting AP_WILY_FLAGS
+    ; and without advancing vanilla Wily progression.
+    JML $C00E08
+
+
+.real_stage_clear:
     ; Use AP-selected Wily stage, not vanilla $0B7C.
     ; Wily 1/2/3 can now be cleared out of vanilla order.
     LDA.l !AP_SELECTED_WILY_STAGE
@@ -2897,11 +3181,13 @@ AP_WilyStageClearCheck:
     STA.l $7E0B7C
     JML $C00DFF
 
+
 .clear_wily_1:
     LDA.l !AP_WILY_FLAGS
     ORA #$01
     STA.l !AP_WILY_FLAGS
     BRA .return_to_stage_select
+
 
 .clear_wily_2:
     LDA.l !AP_WILY_FLAGS
@@ -2909,13 +3195,20 @@ AP_WilyStageClearCheck:
     STA.l !AP_WILY_FLAGS
     BRA .return_to_stage_select
 
+
 .clear_wily_3:
     LDA.l !AP_WILY_FLAGS
     ORA #$04
     STA.l !AP_WILY_FLAGS
     BRA .return_to_stage_select
 
+
 .clear_wily_4:
+    ; Record Wily 4 as cleared.
+    LDA.l !AP_WILY_FLAGS
+    ORA #$08
+    STA.l !AP_WILY_FLAGS
+
     ; Wily 4 / Capsule keeps vanilla final-stage behavior.
     ; AP goal is handled by AP_WilyCapsuleDefeatedHook.
     LDA #$00
@@ -2928,8 +3221,10 @@ AP_WilyStageClearCheck:
     STA.l $7E0B7C
     JML $C00DFF
 
+
 .return_to_stage_select:
-    ; The selected Wily stage is now consumed.
+    ; Clear the current selection so stage select can
+    ; prefer the next uncleared Wily stage.
     LDA #$00
     STA.l !AP_SELECTED_WILY_STAGE
 
@@ -2999,7 +3294,11 @@ AP_HasAnyAvailableWilyStage:
     RTL
 
 AP_SelectFirstAvailableWilyStage:
-    ; Wily 1 available if access code owned and stage not cleared.
+    ; Prefer an unlocked Wily 1-3 stage that has not
+    ; been cleared yet. This preserves the normal
+    ; progression-oriented default selection.
+
+    ; Wily 1
     LDA.l !AP_WILY_ACCESS
     AND #$01
     BEQ .check_2
@@ -3013,7 +3312,7 @@ AP_SelectFirstAvailableWilyStage:
     RTS
 
 .check_2:
-    ; Wily 2 available if access code owned and stage not cleared.
+    ; Wily 2
     LDA.l !AP_WILY_ACCESS
     AND #$02
     BEQ .check_3
@@ -3027,7 +3326,7 @@ AP_SelectFirstAvailableWilyStage:
     RTS
 
 .check_3:
-    ; Wily 3 available if access code owned and stage not cleared.
+    ; Wily 3
     LDA.l !AP_WILY_ACCESS
     AND #$04
     BEQ .check_4
@@ -3041,17 +3340,51 @@ AP_SelectFirstAvailableWilyStage:
     RTS
 
 .check_4:
+    ; Wily 4 remains available whenever its configured
+    ; requirement is satisfied.
     LDA #$04
     STA.l !AP_SELECTED_WILY_STAGE
 
     JSR AP_IsSelectedWilyStageAvailable
-    BCC .none
+    BCS .done
 
+    ; No uncleared Wily stage is currently available.
+    ;
+    ; Fall back to any unlocked Wily 1-3 stage,
+    ; including stages that have already been cleared.
+    ; This allows missed Pickupsanity locations to be revisited.
+
+    LDA.l !AP_WILY_ACCESS
+    AND #$01
+    BEQ .fallback_2
+
+    LDA #$01
+    STA.l !AP_SELECTED_WILY_STAGE
+    RTS
+
+.fallback_2:
+    LDA.l !AP_WILY_ACCESS
+    AND #$02
+    BEQ .fallback_3
+
+    LDA #$02
+    STA.l !AP_SELECTED_WILY_STAGE
+    RTS
+
+.fallback_3:
+    LDA.l !AP_WILY_ACCESS
+    AND #$04
+    BEQ .none
+
+    LDA #$03
+    STA.l !AP_SELECTED_WILY_STAGE
     RTS
 
 .none:
     LDA #$00
     STA.l !AP_SELECTED_WILY_STAGE
+
+.done:
     RTS
 
 AP_SelectNextAvailableWilyStage:
@@ -3190,13 +3523,11 @@ AP_IsSelectedWilyStageAvailable:
     RTS
 
 .stage_1:
+    ; A cleared Wily stage remains available.
+    ; Only the Access Code is required.
     LDA.l !AP_WILY_ACCESS
     AND #$01
     BEQ .unavailable
-
-    LDA.l !AP_WILY_FLAGS
-    AND #$01
-    BNE .unavailable
 
     SEC
     RTS
@@ -3206,10 +3537,6 @@ AP_IsSelectedWilyStageAvailable:
     AND #$02
     BEQ .unavailable
 
-    LDA.l !AP_WILY_FLAGS
-    AND #$02
-    BNE .unavailable
-
     SEC
     RTS
 
@@ -3217,10 +3544,6 @@ AP_IsSelectedWilyStageAvailable:
     LDA.l !AP_WILY_ACCESS
     AND #$04
     BEQ .unavailable
-
-    LDA.l !AP_WILY_FLAGS
-    AND #$04
-    BNE .unavailable
 
     SEC
     RTS
@@ -3923,7 +4246,746 @@ AP_PaidExitBoltGraphicsBottom:
     db $E1,$E1,$F1,$E1,$FA,$F2,$FE,$FE
     db $FC,$FC,$F8,$F8,$00,$00,$00,$00
 
-assert pc() <= $D8FEA0S
+; ============================================
+; Pickupsanity location table
+;
+; Entry format (5 bytes):
+;   db stage ID
+;   dw vanilla source pointer
+;   db AP_PICKUP_CHECKS byte offset
+;   db bit mask
+; ============================================
+
+AP_PickupTable:
+
+    ; ----------------------------------------
+    ; Spring Man - stage $08
+    ; ----------------------------------------
+
+    ; Location 0 - Large Bolt
+    db $08
+    dw $F500
+    db $00, $01
+
+    ; Location 1 - Large Health Capsule 1
+    db $08
+    dw $F588
+    db $00, $02
+
+    ; Location 3 - Large Energy Capsule
+    db $08
+    dw $F5E8
+    db $00, $08
+
+    ; Location 6 - Large Health Capsule 2
+    db $08
+    dw $F788
+    db $00, $40
+
+
+    ; ----------------------------------------
+    ; Freeze Man - stage $01
+    ; ----------------------------------------
+
+    ; Location 7 - Large Energy Capsule
+    db $01
+    dw $F588
+    db $00, $80
+
+    ; Location 8 - Large Health Capsule
+    db $01
+    dw $F5A0
+    db $01, $01
+
+
+    ; ----------------------------------------
+    ; Slash Man - stage $05
+    ; ----------------------------------------
+
+    ; Location 10 - Large Health Capsule 1
+    db $05
+    dw $F540
+    db $01, $04
+
+    ; Location 11 = E-Tank $BA9 - tracked table
+
+    ; Location 12 - Large Health Capsule 2
+    db $05
+    dw $F628
+    db $01, $10
+
+
+    ; ----------------------------------------
+    ; Cloud Man - stage $02
+    ; ----------------------------------------
+
+    ; Location 13 - Large Health Capsule 1
+    db $02
+    dw $F5C0
+    db $01, $20
+
+    ; Locations 14/15 = 1-Ups - tracked table
+
+    ; Location 16 - Large Health Capsule 2
+    db $02
+    dw $F698
+    db $02, $01
+
+    ; Location 17 - Large Bolt
+    db $02
+    dw $F738
+    db $02, $02
+
+
+    ; ----------------------------------------
+    ; Junk Man - stage $03
+    ; ----------------------------------------
+
+    ; Location 18 - Large Bolt
+    db $03
+    dw $F520
+    db $02, $04
+
+    ; Location 19 - Large Health Capsule 1
+    db $03
+    dw $F6A0
+    db $02, $08
+
+    ; Location 20 = 1-Up - tracked table
+
+    ; Location 21 - Large Energy Capsule
+    db $03
+    dw $F7F0
+    db $02, $20
+
+
+    ; ----------------------------------------
+    ; Turbo Man - stage $04
+    ; ----------------------------------------
+
+    ; Location 22 - Large Health Capsule 1
+    db $04
+    dw $F5C8
+    db $02, $40
+
+    ; Location 23 = 1-Up - tracked table
+
+    ; Location 24 - Large Health Capsule 2
+    db $04
+    dw $F710
+    db $03, $01
+
+    ; Location 25 = E-Tank - tracked table
+
+
+    ; ----------------------------------------
+    ; Burst Man - stage $07
+    ; ----------------------------------------
+
+    ; Locations 26-28 = tracked table
+
+    ; Location 29 - Large Health Capsule 1
+    db $07
+    dw $F638
+    db $03, $20
+
+    ; Location 30 - Large Energy Capsule
+    db $07
+    dw $F6B8
+    db $03, $40
+
+    ; Location 31 - Large Health Capsule 2
+    db $07
+    dw $F780
+    db $03, $80
+
+
+    ; ----------------------------------------
+    ; Shade Man - stage $06
+    ; ----------------------------------------
+
+    ; Location 32 - Large Bolt
+    db $06
+    dw $F540
+    db $04, $01
+
+    ; Location 33 - Large Health Capsule 1
+    db $06
+    dw $F698
+    db $04, $02
+
+    ; Location 34 = 1-Up - tracked table
+
+    ; Location 35 - Large Health Capsule 2
+    db $06
+    dw $F710
+    db $04, $08
+
+    ; Location 36 = 1-Up - tracked table
+
+
+    ; ----------------------------------------
+    ; Wily 1 - stage $0A
+    ; ----------------------------------------
+
+    ; Location 37 - Large Bolt
+    db $0A
+    dw $F528
+    db $04, $20
+
+    ; Location 38 - Large Energy
+    db $0A
+    dw $F580
+    db $04, $40
+
+    ; Location 39 = 1-Up - tracked table
+
+    ; Location 40 - Large Health Capsule 1
+    db $0A
+    dw $F5D8
+    db $05, $01
+
+    ; Location 41 - Large Health Capsule 2
+    db $0A
+    dw $F690
+    db $05, $02
+
+    ; Location 42 = E-Tank - tracked table
+
+
+    ; ----------------------------------------
+    ; Wily 2 - stage $0B
+    ; ----------------------------------------
+
+    ; Location 43 - Large Bolt
+    db $0B
+    dw $F500
+    db $05, $08
+
+    ; Location 44 - Large Health Capsule 1
+    db $0B
+    dw $F5A8
+    db $05, $10
+
+    ; Location 45 = 1-Up - tracked table
+
+    ; Location 46 - Large Health Capsule 2
+    db $0B
+    dw $F5F8
+    db $05, $40
+
+    ; Location 47 - Small Health Capsule 1
+    db $0B
+    dw $F648
+    db $05, $80
+
+    ; Location 48 - Small Health Capsule 2
+    db $0B
+    dw $F650
+    db $06, $01
+
+    ; Location 49 - Small Health Capsule 3
+    db $0B
+    dw $F658
+    db $06, $02
+
+    ; Location 50 - Large Health Capsule 3
+    db $0B
+    dw $F748
+    db $06, $04
+
+    ; Location 51 - Large Energy Capsule
+    db $0B
+    dw $F7D0
+    db $06, $08
+
+    ; Location 52 - Large Health Capsule 4
+    db $0B
+    dw $F7E8
+    db $06, $10
+
+
+    ; ----------------------------------------
+    ; Wily 3 - stage $0C
+    ; ----------------------------------------
+
+    ; Location 53 - Large Bolt 1
+    db $0C
+    dw $F560
+    db $06, $20
+
+    ; Location 54 - Large Bolt 2
+    db $0C
+    dw $F558
+    db $06, $40
+
+    ; Location 55 - Large Health Capsule 1
+    db $0C
+    dw $F580
+    db $06, $80
+
+    ; Locations 56-61 = tracked table
+
+    ; Location 62 - Large Health Capsule 2
+    db $0C
+    dw $F778
+    db $07, $40
+
+    ; Location 63 = E-Tank 2 - tracked table
+
+    ; ----------------------------------------
+    ; Wily 4 - stage $0D
+    ; ----------------------------------------
+
+    ; Location 64 - Large Bolt 1
+    db $0D
+    dw $F528
+    db $08, $01
+
+    ; Location 65 - Large Bolt 2
+    db $0D
+    dw $F530
+    db $08, $02
+
+    ; Location 66 - Large Bolt 3
+    db $0D
+    dw $F540
+    db $08, $04
+
+    ; Location 67 = W-Tank $BA9 - tracked table
+    ; Location 68 = 1-Up $BAA - tracked table
+
+    ; Location 69 - Large Bolt 4
+    db $0D
+    dw $F518
+    db $08, $20
+
+    ; Location 70 - Large Bolt 5
+    db $0D
+    dw $F510
+    db $08, $40
+
+    ; Location 71 - Large Bolt 6
+    db $0D
+    dw $F508
+    db $08, $80
+
+    ; End of table.
+    db $FF
+    dw $0000
+    db $00, $00
+
+; ============================================
+; Pickupsanity tracked pickup table
+;
+; Used by 1-Ups / tanks tracked through $0BA8-$0BAF.
+;
+; Entry format (4 bytes):
+;   db stage ID
+;   db $BAx index ($BA8 + index)
+;   db AP_PICKUP_CHECKS byte offset
+;   db bit mask
+; ============================================
+
+AP_TrackedPickupTable:
+
+    ; Spring Man - stage $08
+    ; Location 2 - 1-Up 1 - $BA9
+    db $08, $01, $00, $04
+
+    ; Location 4 - 1-Up 2 - $BAA
+    db $08, $02, $00, $10
+
+    ; Location 5 - E-Tank - $BAB
+    db $08, $03, $00, $20
+
+
+    ; Freeze Man - stage $01
+    ; Location 9 - E-Tank - $BAA
+    db $01, $02, $01, $02
+
+
+    ; Slash Man - stage $05
+    ; Location 11 - E-Tank - $BA9
+    db $05, $01, $01, $08
+
+
+    ; Cloud Man - stage $02
+    ; Location 14 - 1-Up 1 - $BA9
+    db $02, $01, $01, $40
+
+    ; Location 15 - 1-Up 2 - $BAA
+    db $02, $02, $01, $80
+
+
+    ; Junk Man - stage $03
+    ; Location 20 - 1-Up - $BA9
+    db $03, $01, $02, $10
+
+
+    ; Turbo Man - stage $04
+    ; Location 23 - 1-Up - $BA9
+    db $04, $01, $02, $80
+
+    ; Location 25 - E-Tank - $BAA
+    db $04, $02, $03, $02
+
+
+    ; Burst Man - stage $07
+    ; Location 26 - 1-Up 1 - $BAB
+    db $07, $03, $03, $04
+
+    ; Location 27 - E-Tank - $BA9
+    db $07, $01, $03, $08
+
+    ; Location 28 - 1-Up 2 - $BAA
+    db $07, $02, $03, $10
+
+
+    ; Shade Man - stage $06
+    ; Location 34 - 1-Up 1 - $BA9
+    db $06, $01, $04, $04
+
+    ; Location 36 - 1-Up 2 - $BAA
+    db $06, $02, $04, $10
+
+
+    ; ----------------------------------------
+    ; Wily 1 - stage $0A
+    ; ----------------------------------------
+
+    ; Location 39 - 1-Up - $BAA
+    db $0A, $02, $04, $80
+
+    ; Location 42 - E-Tank - $BAB
+    db $0A, $03, $05, $04
+
+
+    ; ----------------------------------------
+    ; Wily 2 - stage $0B
+    ; ----------------------------------------
+
+    ; Location 45 - 1-Up - $BAA
+    db $0B, $02, $05, $20
+
+
+    ; ----------------------------------------
+    ; Wily 3 - stage $0C
+    ; ----------------------------------------
+
+    ; Location 56 - 1-Up 1 - $BA9
+    db $0C, $01, $07, $01
+
+    ; Location 57 - 1-Up 2 - $BAA
+    db $0C, $02, $07, $02
+
+    ; Location 58 - E-Tank 1 - $BAB
+    db $0C, $03, $07, $04
+
+    ; Location 59 - S-Tank - $BAF
+    db $0C, $07, $07, $08
+
+    ; Location 60 - W-Tank - $BAC
+    db $0C, $04, $07, $10
+
+    ; Location 61 - 1-Up 3 - $BAE
+    db $0C, $06, $07, $20
+
+    ; Location 63 - E-Tank 2 - $BAD
+    db $0C, $05, $07, $80
+
+    ; ----------------------------------------
+    ; Wily 4 - stage $0D
+    ; ----------------------------------------
+
+    ; Location 67 - W-Tank - $BA9
+    db $0D, $01, $08, $08
+
+    ; Location 68 - 1-Up - $BAA
+    db $0D, $02, $08, $10
+
+    ; End of tracked pickup table.
+    db $FF, $00, $00, $00
+
+
+; ------------------------------------------------
+; AP_FindTrackedPickup
+;
+; Input:
+;   Y = vanilla $BAx index
+;       1 -> $BA9
+;       2 -> $BAA
+;       3 -> $BAB
+;       ...
+;
+; Output:
+;   Carry set   = found
+;   Carry clear = not found
+;
+;   On success:
+;       X = byte offset into AP_TrackedPickupTable
+;
+; A/X/Y must be 16-bit on entry.
+; A is returned 16-bit.
+; ------------------------------------------------
+
+AP_FindTrackedPickup:
+    LDX #$0000
+
+.loop:
+    ; Entry +0 = stage ID.
+    SEP #$20
+    LDA.l AP_TrackedPickupTable,x
+
+    ; $FF terminates the table.
+    CMP #$FF
+    BEQ .not_found
+
+    ; Match current stage.
+    LDA.l $7E0B73
+    CMP.l AP_TrackedPickupTable,x
+    BNE .next
+
+    ; Entry +1 = vanilla $BAx index.
+    TYA
+    CMP.l AP_TrackedPickupTable+1,x
+    BEQ .found
+
+.next:
+    ; Each compressed entry is 4 bytes.
+    REP #$20
+    TXA
+    CLC
+    ADC #$0004
+    TAX
+    BRA .loop
+
+.found:
+    REP #$20
+    SEC
+    RTS
+
+.not_found:
+    REP #$20
+    CLC
+    RTS
+
+AP_TrackedPickupMarkHook:
+    ; Reproduce vanilla:
+    ;   TAX
+    ;   INC $0BA8,X
+    TAX
+    INC $0BA8,x
+
+    ; Preserve flags produced by vanilla INC.
+    PHP
+
+    REP #$30
+    PHA
+    PHX
+    PHY
+
+    ; Y = vanilla $BAx index:
+    ;   1 = $BA9
+    ;   2 = $BAA
+    ;   3 = $BAB
+    ;   ...
+    TXA
+    AND #$00FF
+    TAY
+
+    ; Default: not a new AP location.
+    SEP #$20
+    LDA #$00
+    STA.l !AP_PICKUP_NEW_CHECK
+
+    ; Lookup expects 16-bit A/X/Y.
+    REP #$20
+    JSR AP_FindTrackedPickup
+    BCC .done
+
+    ; Entry +3 = bit mask.
+    SEP #$20
+    LDA.l AP_TrackedPickupTable+3,x
+
+    ; Preserve mask in Y.
+    REP #$20
+    AND #$00FF
+    TAY
+
+    ; Entry +2 = AP_PICKUP_CHECKS byte offset.
+    SEP #$20
+    LDA.l AP_TrackedPickupTable+2,x
+
+    REP #$20
+    AND #$00FF
+    TAX
+
+    SEP #$20
+
+    ; If clear before this collection, this is the
+    ; first AP collection.
+    TYA
+    AND.l !AP_PICKUP_CHECKS,x
+    BNE .already_checked
+
+    LDA #$01
+    STA.l !AP_PICKUP_NEW_CHECK
+
+.already_checked:
+    ; Mark AP location checked.
+    TYA
+    ORA.l !AP_PICKUP_CHECKS,x
+    STA.l !AP_PICKUP_CHECKS,x
+
+.done:
+    REP #$30
+    PLY
+    PLX
+    PLA
+
+    ; Restore flags produced by vanilla INC.
+    PLP
+    RTL
+
+AP_OneUpPickupGrantHook:
+    ; Vanilla has already verified lives < 9.
+    ;
+    ; First collection of a tracked Pickupsanity 1-Up:
+    ;   suppress the vanilla life.
+    ;
+    ; Later collections:
+    ;   grant the vanilla life normally.
+
+    PHP
+
+    ; Preserve X/Y because the replaced vanilla
+    ; instructions did not modify them.
+    REP #$30
+    PHX
+    PHY
+
+    ; Determine vanilla $BAx index from active object.
+    SEP #$30
+
+    LDA $0B
+    LSR
+    LSR
+    LSR
+    LSR
+    AND #$07
+    TAY
+
+    ; Lookup expects 16-bit A/X/Y.
+    REP #$30
+    JSR AP_FindTrackedPickup
+    BCC .grant
+
+    ; Entry +3 = bit mask.
+    SEP #$20
+    LDA.l AP_TrackedPickupTable+3,x
+
+    ; Preserve mask in Y.
+    REP #$20
+    AND #$00FF
+    TAY
+
+    ; Entry +2 = AP_PICKUP_CHECKS byte offset.
+    SEP #$20
+    LDA.l AP_TrackedPickupTable+2,x
+
+    REP #$20
+    AND #$00FF
+    TAX
+
+    SEP #$20
+
+    ; If the AP bit is still clear, this is the
+    ; first collection. The later $56E5 path sets it.
+    TYA
+    AND.l !AP_PICKUP_CHECKS,x
+    BEQ .skip_grant
+
+.grant:
+    SEP #$20
+
+    ; Vanilla 1-Up grant.
+    LDA.l $7E0B81
+    INC
+    STA.l $7E0B81
+
+.skip_grant:
+    REP #$30
+    PLY
+    PLX
+
+    ; Restore processor state from before hook.
+    PLP
+
+    ; Reproduce replaced:
+    ;   LDA #$12
+    ;
+    ; Original site uses 8-bit A.
+    SEP #$20
+    LDA #$12
+    RTL
+
+AP_ETankPickupGrantHook:
+    ; First AP collection: don't give vanilla tank,
+    ; but still use the normal pickup sound path.
+    LDA.l !AP_PICKUP_NEW_CHECK
+    BNE .give_sound
+
+    ; Repeat collection: vanilla behavior.
+    LDA.l $7E0BA0
+    CMP #$04
+    BCS .full
+
+    INC
+    STA.l $7E0BA0
+
+.give_sound:
+    JML $C256DA
+
+.full:
+    JML $C256E0
+
+
+AP_WTankPickupGrantHook:
+    LDA.l !AP_PICKUP_NEW_CHECK
+    BNE .give_sound
+
+    LDA.l $7E0BA1
+    CMP #$04
+    BCS .full
+
+    INC
+    STA.l $7E0BA1
+
+.give_sound:
+    JML $C256DA
+
+.full:
+    JML $C256E0
+
+
+AP_STankPickupGrantHook:
+    LDA.l !AP_PICKUP_NEW_CHECK
+    BNE .give_sound
+
+    LDA.l $7E0BA2
+    BNE .full
+
+    INC
+    STA.l $7E0BA2
+
+.give_sound:
+    JML $C256DA
+
+.full:
+    JML $C256E0
+
+assert pc() <= $D8FEA0
 
 org $D8FEA0
 AP_ConfigStartingLives:
@@ -3939,13 +5001,13 @@ AP_ConfigStartingBoltsLo:
 AP_ConfigStartingBoltsHi:
     db $00
 AP_ConfigPaidExitUnit:
-    db $00
+    db $01
 AP_ConfigPaidExitUnitCostLo:
-    db $64
+    db $00
 AP_ConfigPaidExitUnitCostHi:
     db $00
 AP_ConfigExitUnitInUnclearedStages:
-    db $00
+    db $01
 AP_ConfigWily4RequirementType:
     db $00
 AP_ConfigWily4WilyStages:
@@ -3967,7 +5029,7 @@ AP_ConfigStartingRobotMasterAccess:
 AP_ConfigCheckpointSelection:
     db $01
 AP_ConfigCheckpointSelectionInUnclearedStages:
-    db $00
+    db $01
 
 ; ============================================
 ; AP ROM auth token

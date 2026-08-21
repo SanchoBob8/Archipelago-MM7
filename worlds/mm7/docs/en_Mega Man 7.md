@@ -14,13 +14,14 @@ Mega Man 7 randomizes the following into the multiworld:
 * Rush Plates
 * Proto Man clues and the Proto Shield location
 * Selected stage pickups and shop upgrades
+* Freestanding stage pickups, when Pickupsanity is enabled
 * Wily Access Codes
 * Wily boss rewards
 * Consumable items
 
 The game is completed by defeating Wily Capsule.
 
-## How does Robot Master progression work?
+## How does Robot Master Access Codes work?
 
 All eight Robot Master stages are visible on the stage-select screen from the beginning.
 
@@ -35,6 +36,34 @@ When Boss Weakness Logic is enabled, the generated logic expects the player to p
 When both Robot Master Access Codes and Boss Weakness Logic are enabled, the starting Robot Master is also paired with an appropriate starting weakness so that at least one stage can be completed.
 
 Exit Unit options may provide an alternate way to collect a stage check and leave without defeating the boss.
+
+## How does Pickupsanity work?
+
+When Pickupsanity is enabled, 72 freestanding pickups found throughout the Robot Master and Wily stages become Archipelago location checks.
+
+Pickupsanity includes stage-placed:
+
+* Health Energy
+* Weapon Energy
+* Bolts
+* 1-Ups
+* E-Tanks
+* W-Tanks
+* S-Tanks
+
+Enemy drops are not included. Only fixed pickups that are part of the stage layout are randomized.
+
+Each pickup placement can only be checked once. Some Mega Man 7 pickups normally respawn after leaving the area or re-entering the stage. After a Pickupsanity location has already been checked, later collections of that same placement behave as normal vanilla pickups and do not send another Archipelago check.
+
+Robot Master stage pickups follow the same stage-access rules as the rest of the game. When Robot Master Access Codes are enabled, pickups inside a locked stage cannot be reached until its Access Code has been received.
+
+The generated logic also considers whether the player can safely leave the stage after collecting a pickup. Normally this means being able to complete the stage. If Exit Unit in Uncleared Stages is enabled, a valid Exit Unit route may instead allow the player to collect a pickup and leave without defeating the boss.
+
+Pickup-specific movement or weapon requirements are also respected. For example, some pickups may require Rush Coil, Rush Jet, Freeze Cracker, Thunder Bolt, or another specific method of reaching them.
+
+Pickupsanity includes pickups in Wily 1, Wily 2, Wily 3, and Wily 4. Wily-stage pickups require access to their corresponding Wily stage.
+
+Wily 5 pickups are not included because they appear immediately before the final goal and would add little meaningful progression.
 
 ## How does checkpoint selection work?
 
@@ -69,6 +98,8 @@ Wily 1, Wily 2, and Wily 3 each have an independent Wily Access Code.
 After receiving an Access Code, its corresponding Wily stage becomes selectable from the Wily box on the stage-select screen. **Available Wily stages can be cycled with L and R.**
 
 Wily 1, Wily 2, and Wily 3 can be completed in any order.
+
+Previously cleared Wily stages remain selectable. This is especially useful when Pickupsanity is enabled and a stage still contains unchecked pickups.
 
 Access to Wily 4 is configurable. It can require a selected number of:
 
@@ -125,8 +156,11 @@ The Super Adaptor is not a randomized item. It is granted after receiving all fo
 * Intro Stage clear
 * Mash / Robot Museum clear
 * Wily 1, Wily 2, and Wily 3 boss rewards
+* 72 freestanding stage pickups when Pickupsanity is enabled
 
 Some items can be obtained either from an in-stage pickup or by purchasing them in Auto's shop. Both methods point to the same Archipelago location, so each location can only be checked once.
+
+Pickupsanity locations are also one-time Archipelago checks. If the same stage pickup respawns after it has already been checked, collecting it again does not create another check.
 
 ## When the player receives an item, what happens?
 
@@ -158,6 +192,20 @@ When enabled, the generated logic expects the player to have an accepted weaknes
 
 When used together with Robot Master Access Codes, the starting Robot Master is given an appropriate starting weakness.
 
+### Pickupsanity
+
+When enabled, 72 freestanding stage pickups become additional Archipelago locations.
+
+These locations include fixed Health Energy, Weapon Energy, Bolt, 1-Up, and Tank pickups throughout the eight Robot Master stages and Wily 1 through Wily 4.
+
+Enemy drops are not randomized.
+
+Each fixed pickup placement can only send its Archipelago check once. If that pickup later respawns, subsequent collections behave normally and do not send additional checks.
+
+The logic accounts for both the requirements needed to physically reach a pickup and the ability to leave the stage afterward.
+
+Robot Master Access Codes, Boss Weakness Logic, Exit Unit in Uncleared Stages, and relevant movement or weapon requirements can therefore affect when a Pickupsanity location is considered reachable.
+
 ### Checkpoint Selection
 
 When enabled, L and R can be used on the stage-select screen to choose between the entrance, midpoint, and pre-boss checkpoints of eligible Robot Master stages.
@@ -181,6 +229,8 @@ The following starting resources are configurable:
 ### Exit Unit Options
 
 Exit Unit can optionally be used in stages that have not already been cleared.
+
+This option is especially relevant to Pickupsanity. When Exit Unit in Uncleared Stages is enabled, generated logic may allow the player to enter a stage, collect an available pickup or other check, and leave without defeating the boss.
 
 Paid Exit Unit allows the player to use Exit Unit before receiving the actual item by spending the configured number of bolts.
 
@@ -222,5 +272,4 @@ This is a playable pre-release.
 
 * The vanilla password system does not preserve Archipelago items, checks, or progression. Use emulator save states to resume a game after closing the emulator.
 * On-screen item receive messages are not currently implemented.
-* EnergyLink is not currently implemented.
 * The Wily stage letter on the stage-select screen may use a different color depending on the most recently displayed Robot Master name. This is a cosmetic issue.

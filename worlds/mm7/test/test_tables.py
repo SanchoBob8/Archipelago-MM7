@@ -66,7 +66,11 @@ class TestMM7PoolTables(unittest.TestCase):
     def test_pool_matches_randomized_locations_for_every_starter(
         self,
     ) -> None:
-        randomized_location_count = len(location_name_to_id)
+        randomized_location_count = sum(
+            1
+            for location_name in active_locations
+            if location_name in location_name_to_id
+        )
 
         for starter_access_code in robot_master_access_codes:
             with self.subTest(starter=starter_access_code):
@@ -89,6 +93,7 @@ class TestMM7PoolTables(unittest.TestCase):
                     if access_code != starter_access_code:
                         self.assertIn(access_code, pool)
 
+
     def test_pool_excludes_access_codes_when_option_disabled(
         self,
     ) -> None:
@@ -96,8 +101,14 @@ class TestMM7PoolTables(unittest.TestCase):
             include_robot_master_access_codes=False,
         )
 
+        randomized_location_count = sum(
+            1
+            for location_name in active_locations
+            if location_name in location_name_to_id
+        )
+
         self.assertEqual(
-            len(location_name_to_id),
+            randomized_location_count,
             len(pool),
         )
 
