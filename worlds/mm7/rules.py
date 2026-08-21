@@ -314,6 +314,363 @@ def can_leave_stage_after_check(
         )
     )
 
+# ============================================================
+# Pickupsanity
+# ============================================================
+
+PICKUPSANITY_VERTICAL_LOCATIONS = {
+    # Spring Man
+    names.spring_man_e_tank,
+
+    # Cloud Man
+    names.cloud_man_large_health_1,
+    names.cloud_man_one_up_1,
+    names.cloud_man_one_up_2,
+
+    # Burst Man
+    names.burst_man_one_up_1,
+    names.burst_man_one_up_2,
+
+    # Shade Man
+    names.shade_man_large_bolt,
+    names.shade_man_large_health_1,
+    names.shade_man_large_health_2,
+
+    # Wily 1
+    names.wily_1_large_bolt,
+    names.wily_1_large_health_1,
+    names.wily_1_large_health_2,
+
+    # Wily 3
+    names.wily_3_large_bolt_2,
+    names.wily_3_large_health_1,
+    names.wily_3_one_up_1,
+    names.wily_3_one_up_2,
+    names.wily_3_e_tank_1,
+    names.wily_3_s_tank,
+    names.wily_3_w_tank,
+    names.wily_3_one_up_3,
+    names.wily_3_large_health_2,
+    names.wily_3_e_tank_2,
+}
+
+
+PICKUPSANITY_THUNDER_BOLT_LOCATIONS = {
+    names.junk_man_large_health_1,
+}
+
+
+PICKUPSANITY_FREEZE_CRACKER_LOCATIONS = {
+    names.junk_man_one_up,
+}
+
+
+PICKUPSANITY_RUSH_JET_LOCATIONS = {
+    names.wily_1_one_up,
+}
+
+
+PICKUPSANITY_RUSH_JET_OR_SUPER_ADAPTER_LOCATIONS = {
+    names.shade_man_one_up_2,
+    names.wily_1_e_tank,
+}
+
+
+PICKUPSANITY_VERTICAL_OR_FREEZE_CRACKER_LOCATIONS = {
+    names.wily_2_large_weapon_energy,
+    names.wily_2_large_health_4,
+}
+
+
+PICKUPSANITY_ROBOT_MASTER_STAGES = {
+    names.spring_man_defeated: (
+        names.spring_man_large_bolt,
+        names.spring_man_large_health_1,
+        names.spring_man_one_up_1,
+        names.spring_man_large_weapon_energy,
+        names.spring_man_one_up_2,
+        names.spring_man_e_tank,
+        names.spring_man_large_health_2,
+    ),
+
+    names.freeze_man_defeated: (
+        names.freeze_man_large_weapon_energy,
+        names.freeze_man_large_health,
+        names.freeze_man_e_tank,
+    ),
+
+    names.slash_man_defeated: (
+        names.slash_man_large_health_1,
+        names.slash_man_e_tank,
+        names.slash_man_large_health_2,
+    ),
+
+    names.cloud_man_defeated: (
+        names.cloud_man_large_health_1,
+        names.cloud_man_one_up_1,
+        names.cloud_man_one_up_2,
+        names.cloud_man_large_health_2,
+        names.cloud_man_large_bolt,
+    ),
+
+    names.junk_man_defeated: (
+        names.junk_man_large_bolt,
+        names.junk_man_large_health_1,
+        names.junk_man_one_up,
+        names.junk_man_large_weapon_energy,
+    ),
+
+    names.turbo_man_defeated: (
+        names.turbo_man_large_health_1,
+        names.turbo_man_one_up,
+        names.turbo_man_large_health_2,
+        names.turbo_man_e_tank,
+    ),
+
+    names.burst_man_defeated: (
+        names.burst_man_one_up_1,
+        names.burst_man_e_tank,
+        names.burst_man_one_up_2,
+        names.burst_man_large_health_1,
+        names.burst_man_large_weapon_energy,
+        names.burst_man_large_health_2,
+    ),
+
+    names.shade_man_defeated: (
+        names.shade_man_large_bolt,
+        names.shade_man_large_health_1,
+        names.shade_man_one_up_1,
+        names.shade_man_large_health_2,
+        names.shade_man_one_up_2,
+    ),
+}
+
+
+PICKUPSANITY_WILY_STAGES = {
+    1: (
+        names.wily_1_large_bolt,
+        names.wily_1_large_weapon_energy,
+        names.wily_1_one_up,
+        names.wily_1_large_health_1,
+        names.wily_1_large_health_2,
+        names.wily_1_e_tank,
+    ),
+
+    2: (
+        names.wily_2_large_bolt,
+        names.wily_2_large_health_1,
+        names.wily_2_one_up,
+        names.wily_2_large_health_2,
+        names.wily_2_small_health_1,
+        names.wily_2_small_health_2,
+        names.wily_2_small_health_3,
+        names.wily_2_large_health_3,
+        names.wily_2_large_weapon_energy,
+        names.wily_2_large_health_4,
+    ),
+
+    3: (
+        names.wily_3_large_bolt_1,
+        names.wily_3_large_bolt_2,
+        names.wily_3_large_health_1,
+        names.wily_3_one_up_1,
+        names.wily_3_one_up_2,
+        names.wily_3_e_tank_1,
+        names.wily_3_s_tank,
+        names.wily_3_w_tank,
+        names.wily_3_one_up_3,
+        names.wily_3_large_health_2,
+        names.wily_3_e_tank_2,
+    ),
+
+    4: (
+        names.wily_4_large_bolt_1,
+        names.wily_4_large_bolt_2,
+        names.wily_4_large_bolt_3,
+        names.wily_4_w_tank,
+        names.wily_4_one_up,
+        names.wily_4_large_bolt_4,
+        names.wily_4_large_bolt_5,
+        names.wily_4_large_bolt_6,
+    ),
+}
+
+
+def meets_pickupsanity_requirement(
+    state: CollectionState,
+    player: int,
+    location_name: str,
+) -> bool:
+    if location_name in PICKUPSANITY_VERTICAL_LOCATIONS:
+        return can_traverse_vertical(state, player)
+
+    if location_name in PICKUPSANITY_THUNDER_BOLT_LOCATIONS:
+        return state.has(names.thunder_bolt, player)
+
+    if location_name in PICKUPSANITY_FREEZE_CRACKER_LOCATIONS:
+        return state.has(names.freeze_cracker, player)
+
+    if location_name in PICKUPSANITY_RUSH_JET_LOCATIONS:
+        return state.has(names.rush_jet, player)
+
+    if location_name in PICKUPSANITY_RUSH_JET_OR_SUPER_ADAPTER_LOCATIONS:
+        return (
+            state.has(names.rush_jet, player)
+            or has_super_adapter(state, player)
+        )
+
+    if location_name in PICKUPSANITY_VERTICAL_OR_FREEZE_CRACKER_LOCATIONS:
+        return (
+            can_traverse_vertical(state, player)
+            or state.has(names.freeze_cracker, player)
+        )
+
+    return True
+
+def can_leave_wily_stage_after_check(
+    state: CollectionState,
+    world: "MegaMan7World",
+    wily_stage: int,
+) -> bool:
+    player = world.player
+
+    if wily_stage == 1:
+        if not has_wily_1_access(state, player):
+            return False
+
+        can_clear_stage = (
+            can_traverse_vertical(state, player)
+            and meets_boss_weakness_logic(
+                state,
+                world,
+                names.guts_man_g_defeated,
+            )
+        )
+
+        return (
+            can_clear_stage
+            or can_use_exit_unit_after_check(
+                state,
+                world,
+                names.guts_man_g_defeated,
+            )
+        )
+
+    if wily_stage == 2:
+        if not has_wily_2_access(state, player):
+            return False
+
+        can_clear_stage = (
+            (
+                can_traverse_vertical(state, player)
+                or state.has(names.freeze_cracker, player)
+            )
+            and meets_boss_weakness_logic(
+                state,
+                world,
+                names.gamerizer_defeated,
+            )
+        )
+
+        return (
+            can_clear_stage
+            or can_use_exit_unit_after_check(
+                state,
+                world,
+                names.gamerizer_defeated,
+            )
+        )
+
+    if wily_stage == 3:
+        if not has_wily_3_access(state, player):
+            return False
+
+        can_clear_stage = (
+            can_traverse_vertical(state, player)
+            and meets_boss_weakness_logic(
+                state,
+                world,
+                names.hannya_ned_defeated,
+            )
+        )
+
+        return (
+            can_clear_stage
+            or can_use_exit_unit_after_check(
+                state,
+                world,
+                names.hannya_ned_defeated,
+            )
+        )
+
+    if wily_stage == 4:
+        if not has_wily_4_access(state, world):
+            return False
+
+        can_clear_stage = meets_boss_weakness_logic(
+            state,
+            world,
+            names.wily_capsule,
+        )
+
+        return (
+            can_clear_stage
+            or can_use_exit_unit_after_check(
+                state,
+                world,
+                names.wily_capsule,
+            )
+        )
+
+    return False
+
+def set_pickupsanity_rules(
+    world: "MegaMan7World",
+    multiworld: MultiWorld,
+    player: int,
+) -> None:
+    # Robot Master stages.
+    #
+    # A pickup requires both its specific traversal/item requirement
+    # and a valid way to enter and leave the stage.
+    for stage_clear_event, location_names in PICKUPSANITY_ROBOT_MASTER_STAGES.items():
+        for location_name in location_names:
+            multiworld.get_location(
+                location_name,
+                player,
+            ).access_rule = (
+                lambda state, stage=stage_clear_event, location=location_name:
+                meets_pickupsanity_requirement(
+                    state,
+                    player,
+                    location,
+                )
+                and can_leave_stage_after_check(
+                    state,
+                    world,
+                    stage,
+                )
+            )
+
+    # Wily stages.
+    for wily_stage, location_names in PICKUPSANITY_WILY_STAGES.items():
+        for location_name in location_names:
+            multiworld.get_location(
+                location_name,
+                player,
+            ).access_rule = (
+                lambda state, stage=wily_stage, location=location_name:
+                meets_pickupsanity_requirement(
+                    state,
+                    player,
+                    location,
+                )
+                and can_leave_wily_stage_after_check(
+                    state,
+                    world,
+                    stage,
+                )
+            )
 
 def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
     for boss, item_location in BOSS_ITEM_LOCATION_TABLE.items():
@@ -532,5 +889,16 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
         has_wily_4_access(state, world)
         and meets_boss_weakness_logic(state, world, names.wily_capsule)
     )
+
+    # ============================================================
+    # Pickupsanity
+    # ============================================================
+
+    if world.options.pickupsanity.value:
+        set_pickupsanity_rules(
+            world,
+            multiworld,
+            player,
+        )
 
     multiworld.completion_condition[player] = lambda state: state.has(names.wily_capsule, player)

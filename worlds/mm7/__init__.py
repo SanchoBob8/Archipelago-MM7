@@ -29,6 +29,7 @@ from .items import (
 from .locations import (
     MM7Location,
     active_locations,
+    pickupsanity_locations,
     event_location_to_item,
     location_name_to_id,
 )
@@ -92,6 +93,14 @@ class MegaMan7World(World):
     def create_event(self, name: str) -> MM7Item:
         return MM7Item(name, ItemClassification.progression, None, self.player)
 
+    def _get_active_location_names(self) -> list[str]:
+        location_names = list(active_locations)
+
+        if self.options.pickupsanity.value:
+            location_names.extend(pickupsanity_locations)
+
+        return location_names
+
     def create_items(self) -> None:
         access_codes_enabled = bool(
             self.options.robot_master_access_codes.value
@@ -125,7 +134,22 @@ class MegaMan7World(World):
         if self.starting_robot_master_weakness is not None:
             pool.append(self.get_filler_item_name())
 
-        randomized_location_count = len(location_name_to_id)
+        # Pickupsanity adds 72 randomized locations without adding
+        # 72 new progression items, so fill the additional slots
+        # using the normal MM7 filler pool.
+        if self.options.pickupsanity.value:
+            pool.extend(
+                self.get_filler_item_name()
+                for _ in pickupsanity_locations
+            )
+
+        active_location_names = self._get_active_location_names()
+
+        randomized_location_count = sum(
+            1
+            for location_name in active_location_names
+            if location_name in location_name_to_id
+        )
 
         assert len(pool) == randomized_location_count, (
             f"MM7 item pool contains {len(pool)} items, but "
@@ -143,7 +167,7 @@ class MegaMan7World(World):
 
         menu.connect(main_stages)
 
-        for location_name in active_locations:
+        for location_name in self._get_active_location_names():
             location_code = self.location_name_to_id.get(location_name)
 
             location = MM7Location(
@@ -215,6 +239,7 @@ class MegaMan7World(World):
             "robot_master_access_codes": bool(
                 self.options.robot_master_access_codes.value
             ),
+            "pickupsanity": bool(self.options.pickupsanity.value),
             "ap_wram_base": 0x1FA1,
             "boss_flag_order": {
                 "freeze": 0x01,

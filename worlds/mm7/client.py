@@ -10,7 +10,7 @@ from worlds.AutoSNIClient import SNIClient
 
 from . import names
 from .items import rom_receive_id
-from .locations import location_name_to_id
+from .locations import location_name_to_id, pickupsanity_locations
 
 snes_logger = logging.getLogger("SNES")
 
@@ -37,8 +37,6 @@ MM7_ROM_AUTH_TOKEN = ROM_START + 0xD8FEC0
 MM7_ROM_AUTH_TOKEN_SIZE = 32
 MM7_ROM_AUTH_TOKEN_PREFIX = b"MM7AP"
 
-# AP runtime/check block in WRAM.
-# These must match your ASM symbols.
 AP_BOSS_FLAGS = WRAM_START + 0x1FA1
 AP_BOSS_FLAGS_2 = WRAM_START + 0x1FA2
 AP_DEBUG_FLAGS = WRAM_START + 0x1FA3
@@ -53,6 +51,10 @@ AP_PICKUP_FLAGS = WRAM_START + 0x1FB0
 AP_MEGA_FLAGS = WRAM_START + 0x1FB2
 AP_MISC_FLAGS = WRAM_START + 0x1FB3
 AP_WILY_FLAGS = WRAM_START + 0x1FB4
+
+# 9 bytes = 72 Pickupsanity locations.
+AP_PICKUP_CHECKS = WRAM_START + 0x1FC1
+AP_PICKUP_CHECKS_SIZE = 9
 
 BOSS_FLAG_TO_ITEM_LOCATION: Dict[int, str] = {
     0x01: names.freeze_man_defeated_item,
@@ -116,6 +118,7 @@ class MM7SNIClient(SNIClient):
         self.previous_health: Optional[int] = None
         self.previous_lives: Optional[int] = None
         self.previous_player_ready = False
+        self.pickupsanity_enabled = False
 
     async def deathlink_kill_player(self, ctx) -> None:
         from SNIClient import (
@@ -204,7 +207,11 @@ class MM7SNIClient(SNIClient):
         self.previous_player_ready = False
 
         slot_data = args.get("slot_data") or {}
+
         death_link_enabled = bool(slot_data.get("death_link", False))
+        self.pickupsanity_enabled = bool(
+            slot_data.get("pickupsanity", False)
+        )
 
         async_start(
             ctx.update_death_link(death_link_enabled),
@@ -415,6 +422,51 @@ class MM7SNIClient(SNIClient):
 
             if location_id not in ctx.locations_checked:
                 new_checks.append(location_id)
+
+        # Pickupsanity
+        #
+        # ROM layout:
+        #   $1FC1 bit 0 -> pickup index 0
+        #   ...
+        #   $1FC9 bit 7 -> pickup index 71
+        #
+        # pickupsanity_locations uses this exact same 0-71 order.
+        if self.pickupsanity_enabled:
+            pickupsanity_flags = await snes_read(
+                ctx,
+                AP_PICKUP_CHECKS,
+                AP_PICKUP_CHECKS_SIZE,
+            )
+
+            if pickupsanity_flags is None:
+                return
+
+            for byte_index, flag_byte in enumerate(pickupsanity_flags):
+                for bit_index in range(8):
+                    pickup_index = byte_index * 8 + bit_index
+
+                    # Defensive guard in case the Python table and
+                    # ROM bitfield ever become different sizes.
+                    if pickup_index >= len(pickupsanity_locations):
+                        break
+
+                    bit_mask = 1 << bit_index
+
+                    if not flag_byte & bit_mask:
+                        continue
+
+                    location_name = pickupsanity_locations[pickup_index]
+                    location_id = location_name_to_id.get(location_name)
+
+                    if location_id is None:
+                        snes_logger.warning(
+                            "MM7 client missing Pickupsanity location id for %s",
+                            location_name,
+                        )
+                        continue
+
+                    if location_id not in ctx.locations_checked:
+                        new_checks.append(location_id)
 
         if new_checks:
             await ctx.send_msgs([{"cmd": "LocationChecks", "locations": new_checks}])

@@ -188,9 +188,21 @@ class CheckpointSelectionInUnclearedStages(Toggle):
     display_name = "Checkpoint Selection in Uncleared Stages"
     default = False
 
+class Pickupsanity(Toggle):
+    """
+    Adds freestanding stage pickups as Archipelago locations.
+
+    Each unique pickup can be checked only once. After it has been checked,
+    later respawns behave as normal vanilla pickups.
+    """
+
+    display_name = "Pickupsanity"
+    default = False
+
 @dataclass
 class MegaMan7Options(PerGameCommonOptions):
     robot_master_access_codes: RobotMasterAccessCodes
+    pickupsanity: Pickupsanity
     logic_boss_weakness: LogicBossWeakness
 
     skip_intro_stage: SkipIntroStage
@@ -223,6 +235,7 @@ mm7_option_groups = [
         "Progression and Logic",
         [
             RobotMasterAccessCodes,
+            Pickupsanity,
             LogicBossWeakness,
         ],
     ),
