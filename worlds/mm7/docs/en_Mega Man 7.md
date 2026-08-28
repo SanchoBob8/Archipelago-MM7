@@ -2,7 +2,7 @@
 
 ## Where is the options page?
 
-The [player options page for this game](../player-options) contains all the options needed to configure and export a YAML file.
+A template can be found with the last release. It can also be generated using the Option Creator tool in the Archipelago Launcher.
 
 ## What does randomization do to this game?
 
