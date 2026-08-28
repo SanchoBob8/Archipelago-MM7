@@ -29,6 +29,7 @@ from .items import (
 from .locations import (
     MM7Location,
     active_locations,
+    boss_rush_locations,
     pickupsanity_locations,
     event_location_to_item,
     location_name_to_id,
@@ -87,6 +88,12 @@ class MegaMan7World(World):
     item_name_to_id = item_name_to_id
     item_name_groups = item_groups
 
+    def _boss_rush_checks_enabled(self) -> bool:
+        return (
+            self.options.wily_4_behavior.value
+            == self.options.wily_4_behavior.option_split
+        )
+
     def create_item(self, name: str) -> MM7Item:
         return create_mm7_item(name, self.player)
 
@@ -95,6 +102,9 @@ class MegaMan7World(World):
 
     def _get_active_location_names(self) -> list[str]:
         location_names = list(active_locations)
+
+        if self._boss_rush_checks_enabled():
+            location_names.extend(boss_rush_locations)
 
         if self.options.pickupsanity.value:
             location_names.extend(pickupsanity_locations)
@@ -126,6 +136,7 @@ class MegaMan7World(World):
         pool = get_pool_items(
             excluded_items=set(starter_items),
             include_robot_master_access_codes=access_codes_enabled,
+            include_boss_rush_access=self._boss_rush_checks_enabled(),
         )
 
         # When weakness logic is enabled alongside Access Codes, the matching
@@ -133,6 +144,15 @@ class MegaMan7World(World):
         # randomized item/location count.
         if self.starting_robot_master_weakness is not None:
             pool.append(self.get_filler_item_name())
+
+        # Split boss rush adds eight randomized locations.
+        # One slot is occupied by Boss Rush Access Code, so add
+        # seven filler items for the remaining locations.
+        if self._boss_rush_checks_enabled():
+            pool.extend(
+                self.get_filler_item_name()
+                for _ in range(len(boss_rush_locations) - 1)
+            )
 
         # Pickupsanity adds 72 randomized locations without adding
         # 72 new progression items, so fill the additional slots
@@ -205,6 +225,18 @@ class MegaMan7World(World):
         )
 
     def generate_early(self) -> None:
+        # Only Split mode has four independently clearable Wily stages:
+        # Wily 1, Wily 2, Wily 3, and Boss Rush.
+        #
+        # Vanilla and Skip only have three stages that can contribute
+        # to the Wily Stages requirement, so clamp 4 to 3.
+        if (
+            self.options.wily_4_behavior.value
+            != self.options.wily_4_behavior.option_split
+            and self.options.wily_4_wily_stages.value > 3
+        ):
+            self.options.wily_4_wily_stages.value = 3
+
         self.starting_robot_master = None
         self.starting_robot_master_access_code = None
         self.starting_robot_master_weakness = None
@@ -240,6 +272,7 @@ class MegaMan7World(World):
                 self.options.robot_master_access_codes.value
             ),
             "pickupsanity": bool(self.options.pickupsanity.value),
+            "boss_rush_checks": self._boss_rush_checks_enabled(),
             "ap_wram_base": 0x1FA1,
             "boss_flag_order": {
                 "freeze": 0x01,

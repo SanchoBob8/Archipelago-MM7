@@ -47,6 +47,28 @@ hirom
 ; 9 bytes = 72 Pickupsanity locations maximum.
 !AP_PICKUP_CHECKS = $7E1FC1 ; $7E1FC1-$7E1FC9
 
+; Persistent Split-mode boss-rush completion bitmap.
+; One bit per Robot Master rematch.
+!AP_BOSS_RUSH_FLAGS = $7E1FCA
+
+org $C07A9D
+    JSL AP_BossRushCompleteHook
+    RTS
+    NOP
+    NOP
+    NOP
+    NOP
+
+assert pc() == $C07AA6
+
+org $C07A76
+    JSR AP_BossRushMarkHook
+assert pc() == $C07A79
+
+org $C076E9
+    JSR AP_BossRushRestoreHook
+assert pc() == $C076EC
+
 org $C25664
     JSL AP_OneUpPickupGrantHook
     NOP
@@ -863,6 +885,9 @@ AP_PickupCleanupHook:
     PHX
     PHY
 
+    LDA.l AP_ConfigPickupsanity
+    BEQ .done
+
     ; X = byte offset into AP_PickupTable.
     LDX #$0000
 
@@ -944,13 +969,6 @@ assert pc() <= $C07C00
 
 org $C07C00
 
-AP_MainLoopHook:
-    JSR $315A
-    INC $00D1
-    JSL AP_CheckItemReceive
-    JSL AP_UpdateVanillaWilyAvailability
-    RTL
-
 AP_StageSelectInitHook:
     ; Preserve the original vanilla call.
     JSR $397E
@@ -1031,15 +1049,6 @@ AP_QueueCheckpointDigitsUpload:
     PLA
     PLP
     RTS
-
-AP_StageSelectNormalFrameHook:
-    JSR $381C
-
-    JSR AP_ProcessStageSelectRefresh
-    JSR AP_HandleCheckpointSelection
-
-    LDA $00A6
-    RTL
 
 AP_NormalStageEntryGateHook:
     PHP
@@ -1332,6 +1341,13 @@ AP_ApplySelectedCheckpoint:
     SEP #$30
     PHX
 
+    ; TEMP: Issue #19 prototype.
+    ; Wily 4 ($0D) starts at checkpoint 2,
+    ; immediately before Wily Machine 7.
+    LDA.l $7E0B73
+    CMP #$0D
+    BEQ .use_wily_4_behavior
+
     ; Feature disabled: always use the vanilla entrance.
     LDA.l AP_ConfigCheckpointSelection
     BEQ .use_entrance
@@ -1365,6 +1381,24 @@ AP_ApplySelectedCheckpoint:
 
 .use_entrance:
     LDA #$00
+    BRA .store
+
+.use_wily_4_behavior:
+    ; Logical Wily E always starts at checkpoint 2.
+    LDA.l !AP_SELECTED_WILY_STAGE
+    CMP #$05
+    BEQ .use_wily_5_checkpoint
+
+    ; Logical Wily D:
+    ;   Vanilla = 0
+    ;   Split   = 0
+    ;   Skip    = 2
+    LDA.l AP_ConfigWily4Behavior
+    AND #$02
+    BRA .store
+
+.use_wily_5_checkpoint:
+    LDA #$02
 
 .store:
     STA.l $7E0B74
@@ -1560,6 +1594,34 @@ assert pc() <= $C07EC0
 
 org $C07EC0
 
+AP_BossRushMarkHook:
+    ; Preserve the vanilla boss-rush completion bitmap.
+    TSB $0BA5
+
+    ; Mirror the same defeated-rematch bit into AP-owned WRAM.
+    ORA.l !AP_BOSS_RUSH_FLAGS
+    STA.l !AP_BOSS_RUSH_FLAGS
+
+    RTS
+
+AP_BossRushRestoreHook:
+    ; Vanilla reaches C076E9 only when starting Wily D
+    ; from checkpoint 0.
+
+    ; Split mode (1): restore persistent boss-rush progress.
+    LDA.l AP_ConfigWily4Behavior
+    DEC A
+    BNE .clear
+
+    LDA.l !AP_BOSS_RUSH_FLAGS
+    STA $0BA5
+    RTS
+
+.clear:
+    ; Vanilla behavior for non-Split modes.
+    STZ $0BA5
+    RTS
+
 AP_StageSelectWilyCycleHook:
     PHP
     SEP #$30
@@ -1596,19 +1658,12 @@ AP_StageSelectWilyCycleHook:
 
 .cycle_forward:
     JSL AP_SelectNextAvailableWilyStage
-
-    ; Play cursor/change sound if a Wily stage is selected.
-    LDA.l !AP_SELECTED_WILY_STAGE
-    BEQ .finish_vanilla_input
-
-    LDA #$40
-    JSL $C03205
-
-    BRA .finish_vanilla_input
+    BRA .cycle_changed
 
 .cycle_backward:
     JSL AP_SelectPreviousAvailableWilyStage
 
+.cycle_changed:
     ; Play cursor/change sound if a Wily stage is selected.
     LDA.l !AP_SELECTED_WILY_STAGE
     BEQ .finish_vanilla_input
@@ -1760,6 +1815,22 @@ AP_PostOAMDrawHook:
     PLP
     RTL
 
+AP_StageSelectNormalFrameHook:
+    JSR $381C
+
+    JSR AP_ProcessStageSelectRefresh
+    JSR AP_HandleCheckpointSelection
+
+    LDA $00A6
+    RTL
+
+AP_MainLoopHook:
+    JSR $315A
+    INC $00D1
+    JSL AP_CheckItemReceive
+    JSL AP_UpdateVanillaWilyAvailability
+    RTL
+
 assert pc() <= $C08000
 
 org $C00DF8
@@ -1822,7 +1893,7 @@ AP_ClearRuntime:
 .clear_loop:
     STA.l !AP_RUNTIME_START,x
     INX
-    CPX #$29
+    CPX #$2A
     BNE .clear_loop
 
     ; Make the precollected starting stage available before the first
@@ -1833,11 +1904,6 @@ AP_ClearRuntime:
     PLX
     PLP
     RTL
-
-AP_SkipIntroStage:
-    LDA #$01
-    STA $0B73
-    RTS
 
 ; ============================================
 ; AP item receive dispatcher
@@ -1952,6 +2018,12 @@ AP_CheckItemReceive:
     JMP .give_wily_3_access
 +
 
+    ; $2A = Boss Rush Access Code
+    CMP #$2A
+    BNE +
+    JMP .give_boss_rush_access
++
+
     ; $22-$29 = Robot Master Access Codes
     CMP #$22
     BCS +
@@ -2023,19 +2095,38 @@ AP_CheckItemReceive:
     JMP .finish
 
 .give_one_up:
-    INC $0B81
-    JMP .finish
+    LDA.l $7E0B81
+    CMP #$09
+    BCS .resource_finish
+
+    INC
+    STA.l $7E0B81
+    BRA .resource_finish
 
 .give_e_tank:
+    LDA.l $7E0BA0
+    CMP #$04
+    BCS .resource_finish
+
     INC $0BA0
-    JMP .finish
+    BRA .resource_finish
 
 .give_w_tank:
+    LDA.l $7E0BA1
+    CMP #$04
+    BCS .resource_finish
+
     INC $0BA1
-    JMP .finish
+    BRA .resource_finish
 
 .give_s_tank:
+    LDA.l $7E0BA2
+    CMP #$01
+    BCS .resource_finish
+
     INC $0BA2
+
+.resource_finish:
     JMP .finish
 
 .give_proto_cloud_clue:
@@ -2065,22 +2156,22 @@ AP_CheckItemReceive:
     JMP .finish
 
 .give_wily_1_access:
-    LDA.l !AP_WILY_ACCESS
-    ORA #$01
-    STA.l !AP_WILY_ACCESS
-    JSR AP_EnsureVanillaWilyAvailable
-    JMP .finish
+    LDA #$01
+    BRA .give_wily_access
 
 .give_wily_2_access:
-    LDA.l !AP_WILY_ACCESS
-    ORA #$02
-    STA.l !AP_WILY_ACCESS
-    JSR AP_EnsureVanillaWilyAvailable
-    JMP .finish
+    LDA #$02
+    BRA .give_wily_access
 
 .give_wily_3_access:
-    LDA.l !AP_WILY_ACCESS
-    ORA #$04
+    LDA #$04
+    BRA .give_wily_access
+
+.give_boss_rush_access:
+    LDA #$08
+
+.give_wily_access:
+    ORA.l !AP_WILY_ACCESS
     STA.l !AP_WILY_ACCESS
     JSR AP_EnsureVanillaWilyAvailable
     JMP .finish
@@ -2157,9 +2248,6 @@ AP_InitIntroStageFlag:
 .done:
     PLP
     RTL
-
-AP_BitMaskTable:
-    db $01, $02, $04, $08, $10, $20, $40, $80
 
 AP_WeaponAddressTable:
     dw $0B85 ; $01 Freeze Cracker
@@ -2335,7 +2423,7 @@ AP_WilyUnlockGate:
     SEP #$20
 
     LDA.l !AP_WILY_ACCESS
-    AND #$07
+    AND #$0F
     BNE .has_wily_access
 
 .no_wily_access:
@@ -2784,6 +2872,10 @@ AP_ExitUnitMedalCheck:
     SEP #$30
     PHX
 
+    ; Split-mode logical Wily D always has a free Exit Unit.
+    JSL AP_IsSplitWilyD
+    BCS .has_medal
+
     ; If option is enabled, allow Exit Unit even if
     ; the current stage has not been cleared.
     LDA.l AP_ConfigExitUnitInUnclearedStages
@@ -3209,8 +3301,12 @@ AP_WilyStageClearCheck:
     ORA #$08
     STA.l !AP_WILY_FLAGS
 
-    ; Wily 4 / Capsule keeps vanilla final-stage behavior.
-    ; AP goal is handled by AP_WilyCapsuleDefeatedHook.
+    ; Split ends logical Wily 4 here, after the boss rush.
+    LDA.l AP_ConfigWily4Behavior
+    CMP #$01
+    BEQ .return_to_stage_select
+
+    ; Vanilla / Skip keep the existing final-stage behavior.
     LDA #$00
     STA.l !AP_SELECTED_WILY_STAGE
 
@@ -3230,7 +3326,8 @@ AP_WilyStageClearCheck:
 
     PLP
 
-    ; Do not continue vanilla Wily progression for AP Wily 1/2/3.
+    ; Return to stage select without continuing vanilla Wily progression.
+    ; Used by Wily 1-3 and Wily 4 in Split mode.
     JML $C00E08
 
 AP_GetSelectedWilyStageId:
@@ -3252,9 +3349,19 @@ AP_GetSelectedWilyStageId:
 
 .use_selected:
     LDA.l !AP_SELECTED_WILY_STAGE
+
+    ; Logical Wily 5 reuses physical Wily 4 ($0D).
+    CMP #$05
+    BNE .normal_stage_id
+
+    LDA #$0D
+    BRA .return_stage_id
+
+.normal_stage_id:
     CLC
     ADC #$09
 
+.return_stage_id:
     PLP
     RTL
 
@@ -3294,10 +3401,19 @@ AP_HasAnyAvailableWilyStage:
     RTL
 
 AP_SelectFirstAvailableWilyStage:
-    ; Prefer an unlocked Wily 1-3 stage that has not
-    ; been cleared yet. This preserves the normal
-    ; progression-oriented default selection.
+    ; Wily E is the progression target once it becomes available.
+    ; Its availability check requires Split mode and the configured
+    ; final Wily stage requirement.
+    LDA #$05
+    STA.l !AP_SELECTED_WILY_STAGE
 
+    JSR AP_IsSelectedWilyStageAvailable
+    BCC .check_1
+
+    ; Wily E is available and already selected.
+    RTS
+
+.check_1:
     ; Wily 1
     LDA.l !AP_WILY_ACCESS
     AND #$01
@@ -3340,8 +3456,8 @@ AP_SelectFirstAvailableWilyStage:
     RTS
 
 .check_4:
-    ; Wily 4 remains available whenever its configured
-    ; requirement is satisfied.
+    ; Logical Wily 4 is the Boss Rush in Split mode.
+    ; In other modes it remains the normal final Wily stage.
     LDA #$04
     STA.l !AP_SELECTED_WILY_STAGE
 
@@ -3388,119 +3504,62 @@ AP_SelectFirstAvailableWilyStage:
     RTS
 
 AP_SelectNextAvailableWilyStage:
+    PHX
+    PHY
+    LDY #$05
+
+.try_next:
     LDA.l !AP_SELECTED_WILY_STAGE
     INC
-    CMP #$05
-    BCC .store_candidate
+    CMP #$06
+    BCC .store
 
     LDA #$01
 
-.store_candidate:
+.store:
     STA.l !AP_SELECTED_WILY_STAGE
 
     JSR AP_IsSelectedWilyStageAvailable
     BCS .done
 
-    LDA.l !AP_SELECTED_WILY_STAGE
-    INC
-    CMP #$05
-    BCC .store_candidate_2
+    DEY
+    BNE .try_next
 
-    LDA #$01
-
-.store_candidate_2:
-    STA.l !AP_SELECTED_WILY_STAGE
-
-    JSR AP_IsSelectedWilyStageAvailable
-    BCS .done
-
-    LDA.l !AP_SELECTED_WILY_STAGE
-    INC
-    CMP #$05
-    BCC .store_candidate_3
-
-    LDA #$01
-
-.store_candidate_3:
-    STA.l !AP_SELECTED_WILY_STAGE
-
-    JSR AP_IsSelectedWilyStageAvailable
-    BCS .done
-
-    LDA.l !AP_SELECTED_WILY_STAGE
-    INC
-    CMP #$05
-    BCC .store_candidate_4
-
-    LDA #$01
-
-.store_candidate_4:
-    STA.l !AP_SELECTED_WILY_STAGE
-
-    JSR AP_IsSelectedWilyStageAvailable
-    BCS .done
-
-    ; No available Wily stage.
     LDA #$00
     STA.l !AP_SELECTED_WILY_STAGE
 
 .done:
+    PLY
+    PLX
     RTL
 
 AP_SelectPreviousAvailableWilyStage:
+    PHX
+    PHY
+    LDY #$05
+
+.try_previous:
     LDA.l !AP_SELECTED_WILY_STAGE
     DEC
-    BNE .store_candidate
+    BNE .store
 
-    LDA #$04
+    LDA #$05
 
-.store_candidate:
+.store:
     STA.l !AP_SELECTED_WILY_STAGE
 
     JSR AP_IsSelectedWilyStageAvailable
     BCS .done
 
-    LDA.l !AP_SELECTED_WILY_STAGE
-    DEC
-    BNE .store_candidate_2
+    DEY
+    BNE .try_previous
 
-    LDA #$04
-
-.store_candidate_2:
-    STA.l !AP_SELECTED_WILY_STAGE
-
-    JSR AP_IsSelectedWilyStageAvailable
-    BCS .done
-
-    LDA.l !AP_SELECTED_WILY_STAGE
-    DEC
-    BNE .store_candidate_3
-
-    LDA #$04
-
-.store_candidate_3:
-    STA.l !AP_SELECTED_WILY_STAGE
-
-    JSR AP_IsSelectedWilyStageAvailable
-    BCS .done
-
-    LDA.l !AP_SELECTED_WILY_STAGE
-    DEC
-    BNE .store_candidate_4
-
-    LDA #$04
-
-.store_candidate_4:
-    STA.l !AP_SELECTED_WILY_STAGE
-
-    JSR AP_IsSelectedWilyStageAvailable
-    BCS .done
-
-    ; No available Wily stage.
     LDA #$00
     STA.l !AP_SELECTED_WILY_STAGE
 
 .done:
+    PLY
+    PLX
     RTL
 
 AP_IsSelectedWilyStageAvailable:
@@ -3517,6 +3576,9 @@ AP_IsSelectedWilyStageAvailable:
 
     CMP #$04
     BEQ .stage_4
+
+    CMP #$05
+    BEQ .stage_5
 
 .unavailable:
     CLC
@@ -3549,6 +3611,35 @@ AP_IsSelectedWilyStageAvailable:
     RTS
 
 .stage_4:
+    ; In Split mode, logical Wily 4 is the standalone Boss Rush
+    ; and is gated by Boss Rush Access Code.
+    LDA.l AP_ConfigWily4Behavior
+    DEC A
+    BNE .stage_4_final_requirement
+
+    LDA.l !AP_WILY_ACCESS
+    AND #$08
+    BEQ .unavailable
+
+    SEC
+    RTS
+
+.stage_4_final_requirement:
+    ; Vanilla / Skip: logical Wily 4 is still the final Wily stage,
+    ; so use the configured final-stage requirement.
+    JSL AP_CheckWily4Requirement
+    BCC .unavailable
+
+    SEC
+    RTS
+
+.stage_5:
+    ; Logical Wily 5 exists only in Split mode.
+    LDA.l AP_ConfigWily4Behavior
+    DEC A
+    BNE .unavailable
+
+    ; Final Wily Stage uses the configured final-stage requirement.
     JSL AP_CheckWily4Requirement
     BCC .unavailable
 
@@ -3582,7 +3673,7 @@ AP_CheckWily4Requirement:
     BEQ .allow
 
     LDA.l !AP_WILY_FLAGS
-    AND #$07
+    AND #$0F
     STA.l !AP_TEMP
 
     LDX #$00
@@ -3775,6 +3866,7 @@ AP_WilyStageNumberTileTable:
     db $26
     db $27
     db $28
+    db $29
 
 AP_DrawSelectedCheckpointNumber:
     PHP
@@ -3862,6 +3954,10 @@ AP_DrawSelectedCheckpointNumber:
 AP_ExitUnitDisplayGate:
     PHP
     SEP #$20
+
+    ; Split-mode logical Wily D always shows a free Exit Unit.
+    JSL AP_IsSplitWilyD
+    BCS .real_exit_unit
 
     ; Real Exit Unit owned?
     LDA.l $7E0BA4
@@ -4147,6 +4243,10 @@ AP_CheckExitUnitAccess:
     ; Set this again below only if paid access is actually granted.
     LDA #$00
     STA.l !AP_EXIT_UNIT_PAID_PENDING
+
+    ; Split-mode logical Wily D always allows a free Exit Unit.
+    JSL AP_IsSplitWilyD
+    BCS .allow
 
     ; If the real Exit Unit item is owned, allow for free.
     LDA.l $7E0BA4
@@ -4730,6 +4830,11 @@ AP_TrackedPickupTable:
 ; ------------------------------------------------
 
 AP_FindTrackedPickup:
+    ; When Pickupsanity is disabled, no vanilla pickup
+    ; should be treated as an AP location.
+    LDA.l AP_ConfigPickupsanity
+    BEQ .not_found
+
     LDX #$0000
 
 .loop:
@@ -4909,8 +5014,11 @@ AP_OneUpPickupGrantHook:
 .grant:
     SEP #$20
 
-    ; Vanilla 1-Up grant.
+    ; Keep lives within the range supported by the HUD.
     LDA.l $7E0B81
+    CMP #$09
+    BCS .skip_grant
+
     INC
     STA.l $7E0B81
 
@@ -4985,6 +5093,26 @@ AP_STankPickupGrantHook:
 .full:
     JML $C256E0
 
+AP_BossRushCompleteHook:
+    ; C07A9D already runs with 8-bit A, just like vanilla's LDA #$06.
+
+    ; Only Split mode (1) requests the normal stage-clear state.
+    LDA.l AP_ConfigWily4Behavior
+    DEC A
+    BNE .preserve_vanilla_completion
+
+    LDA #$04
+    STA.l $7E00E0
+
+.preserve_vanilla_completion:
+    ; Preserve vanilla boss-rush completion state.
+    LDA #$06
+    STA $01
+    STZ $02
+    STZ $03
+
+    RTL
+
 assert pc() <= $D8FEA0
 
 org $D8FEA0
@@ -5001,7 +5129,7 @@ AP_ConfigStartingBoltsLo:
 AP_ConfigStartingBoltsHi:
     db $00
 AP_ConfigPaidExitUnit:
-    db $01
+    db $00
 AP_ConfigPaidExitUnitCostLo:
     db $00
 AP_ConfigPaidExitUnitCostHi:
@@ -5030,24 +5158,60 @@ AP_ConfigCheckpointSelection:
     db $01
 AP_ConfigCheckpointSelectionInUnclearedStages:
     db $01
+AP_ConfigWily4Behavior:
+    ; 0 = Vanilla
+    ; 1 = Split
+    ; 2 = Skip
+    db $01
 
-; ============================================
-; AP ROM auth token
-;
-; Written by rom.py after the base bsdiff is applied.
-; Client reads this from ROM and uses it as ctx.rom.
-;
-; File offset: $18FEC0
-; CPU addr:    $D8FEC0
-; Size:        32 bytes
-; ============================================
+AP_ConfigPickupsanity:
+    db $00
 
-assert pc() <= $D8FEC0
+AP_ConfigPickupsanityPadding:
+    db $00
+
+AP_BitMaskTable:
+    db $01, $02, $04, $08, $10, $20, $40, $80
+
+assert pc() == $D8FEC0
 
 org $D8FEC0
 AP_ROM_AUTH_TOKEN:
     db "MM7AP"
     fillbyte $00
     fill 27
+
+assert pc() == $D8FEE0
+
+; ============================================
+; Split-mode Wily D free Exit Unit predicate
+;
+; Carry set only for logical Wily D in Split mode.
+; Physical stage $0D is shared by logical Wily D and Wily E,
+; so AP_SELECTED_WILY_STAGE is also required to distinguish them.
+; Caller must already be using 8-bit A.
+; ============================================
+
+org $D8FEE0
+
+AP_IsSplitWilyD:
+    LDA.l AP_ConfigWily4Behavior
+    DEC A
+    BNE .no
+
+    LDA.l $7E0B73
+    CMP #$0D
+    BNE .no
+
+    LDA.l !AP_SELECTED_WILY_STAGE
+    CMP #$04
+    BNE .no
+
+    SEC
+    RTL
+
+.no:
+    CLC
+    RTL
 
 assert pc() <= $D8FF00

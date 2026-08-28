@@ -117,6 +117,7 @@ item_table: Dict[str, MM7ItemData] = {
     names.wily_1_access: MM7ItemData(0x2D, ItemClassification.progression),
     names.wily_2_access: MM7ItemData(0x2E, ItemClassification.progression),
     names.wily_3_access: MM7ItemData(0x2F, ItemClassification.progression),
+    names.boss_rush_access: MM7ItemData(0x38, ItemClassification.progression),
 
     # ========================================================
     # Event items — locked at event locations
@@ -236,6 +237,7 @@ access_code_items: Set[str] = (
         names.wily_1_access,
         names.wily_2_access,
         names.wily_3_access,
+        names.boss_rush_access,
     }
 )
 
@@ -292,6 +294,8 @@ rom_receive_id = {
     names.shade_man_access: 0x27,
     names.burst_man_access: 0x28,
     names.spring_man_access: 0x29,
+
+    names.boss_rush_access: 0x2A,
 }
 
 
@@ -323,6 +327,7 @@ def get_filler_item_name(world) -> str:
 def get_pool_items(
     excluded_items: Optional[Set[str]] = None,
     include_robot_master_access_codes: bool = False,
+    include_boss_rush_access: bool = False,
 ) -> List[str]:
     excluded_items = excluded_items or set()
 
@@ -333,6 +338,12 @@ def get_pool_items(
             continue
 
         if item_name in excluded_items:
+            continue
+
+        if item_name == names.boss_rush_access:
+            if include_boss_rush_access:
+                pool.extend([item_name] * data.count)
+
             continue
 
         is_robot_master_access_code = (
