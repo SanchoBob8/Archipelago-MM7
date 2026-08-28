@@ -82,7 +82,7 @@ class PaidExitUnit(Toggle):
     Allows the Exit Unit to be used before receiving the Exit Unit item by spending bolts.
     """
     display_name = "Paid Exit Unit"
-    default = False
+    default = True
 
 
 class PaidExitUnitCost(Range):
