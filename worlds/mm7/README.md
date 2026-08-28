@@ -11,17 +11,20 @@ Status: Playable pre-release
 * Boss weakness logic option
 
 * Optional Robot Master Access Codes
+
   * One random Robot Master Access Code is granted at the start
   * Remaining Access Codes are added to the item pool
   * If used with Boss Weakness Logic, the relevant weapon to complete the first stage will also be granted at the start
 
 * Optional Pickupsanity
+
   * Adds 72 fixed stage pickups as Archipelago locations
   * Includes Health Energy, Weapon Energy, Bolts, 1-Ups, and Tanks
   * Enemy drops are not included
   * Each pickup placement can only be checked once; later respawns behave normally
 
 * Checkpoint selection for Robot Master stages
+
   * Use L/R on the stage-select screen to choose between the stage entrance, midpoint, and pre-boss checkpoint
   * Can optionally be enabled for uncleared stages
 
@@ -41,11 +44,24 @@ Status: Playable pre-release
 
 * Independent Wily 1, Wily 2, and Wily 3 Access Codes
 
-* Wily 1, 2, and 3 can be completed in any order
+* Wily 1, Wily 2, and Wily 3 can be completed in any order
 
 * Cleared Wily stages remain selectable for re-entry
 
-* Configurable Wily 4 access requirement
+* Configurable Boss Rush / Final Wily Stage layout
+
+  * **Vanilla:** Boss Rush, Wily Machine, and Wily Capsule remain one continuous final stage
+  * **Split:** Boss Rush and Final Wily Stage become separately selectable stages
+  * **Skip:** Boss Rush is skipped and the Final Wily Stage begins before Wily Machine
+
+* Split layout adds a Boss Rush Access Code to the item pool
+
+* Split Boss Rush adds eight Robot Master rematch checks
+
+* Configurable Final Wily Stage requirement
+
+  * Can require cleared Wily stages, defeated Robot Masters, or received Robot Master weapons
+  * In Split layout, completing Boss Rush can count as a fourth cleared Wily stage
 
 * Wily boss reward checks
 
@@ -66,15 +82,21 @@ Status: Playable pre-release
 ## Requirements
 
 * Archipelago 0.6.7 or later
+
 * A clean Mega Man 7 (USA) ROM
+
 * An SNI-compatible SNES setup, such as BizHawk with Connector.lua
 
 ## Installation
 
 1. Install `mm7.apworld` through the Archipelago Launcher.
+
 2. Generate a game using a Mega Man 7 YAML.
+
 3. Open the generated `.apmm7` patch through the Archipelago Launcher.
+
 4. Run the patched ROM in your SNI-compatible emulator.
+
 5. Connect through the Archipelago SNES Client.
 
 See the included setup guide for detailed instructions.
@@ -82,6 +104,7 @@ See the included setup guide for detailed instructions.
 ## Current limitations
 
 * The vanilla password system does not preserve Archipelago items, checks, or progression. Use emulator save states when stopping and resuming a game.
+
 * On-screen item receive messages are not currently implemented.
+
 * The Wily stage letter displayed on the stage-select screen may change color depending on the most recently displayed Robot Master name. This is cosmetic only.
-* EnergyLink is not currently implemented.
