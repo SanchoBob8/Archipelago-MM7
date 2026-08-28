@@ -114,13 +114,12 @@ In Split layout, Boss Rush contains eight additional Archipelago locations, one 
 
 Boss Rush progress is preserved when leaving the Split Boss Rush. The Exit Unit can also be used freely from the Split Boss Rush, allowing the player to leave without clearing it.
 
-Access to the Final Wily Stage is configurable. It can require a selected number of:
+Access to the Final Wily Stage is configurable. It can require:
 
-* Cleared Wily stages
-
-* Defeated Robot Masters
-
-* Received Robot Master weapons
+* A selected number of cleared Wily stages
+* A selected number of defeated Robot Masters
+* A selected number of received Robot Master weapons
+* Defeating Proto Man
 
 When the requirement is based on cleared Wily stages, Wily 1, Wily 2, and Wily 3 each count as one cleared stage. In Split layout, completing Boss Rush can count as a fourth cleared Wily stage.
 
@@ -273,7 +272,9 @@ The Final Wily Stage can be configured to require:
 
 * Received Robot Master weapons
 
-The required count for each requirement type is configurable.
+* Defeating Proto Man
+
+The required count is configurable for the Wily stage, Robot Master, and weapon requirement types. The Proto Man requirement is satisfied by completing the Proto Man fight associated with the Proto Shield location.
 
 When using cleared Wily stages:
 

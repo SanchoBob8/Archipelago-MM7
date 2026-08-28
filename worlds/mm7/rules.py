@@ -231,6 +231,12 @@ def has_final_wily_stage_access(
 
         return weapons_received >= required
 
+    if (
+        requirement_type
+        == world.options.wily_4_requirement_type.option_defeat_protoman
+    ):
+        return can_complete_proto_man_encounter(state, world)
+
     return False
 
 
@@ -272,6 +278,22 @@ def can_farm_shop_bolts(
         state,
         world,
         names.cloud_man_defeated,
+    )
+
+def can_complete_proto_man_encounter(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    player = world.player
+
+    return (
+        state.has(names.proto_man_cloud_man, player)
+        and state.has(names.proto_man_turbo_man, player)
+        and can_leave_stage_after_check(
+            state,
+            world,
+            names.shade_man_defeated,
+        )
     )
 
 def can_buy_shop_upgrade(
@@ -796,10 +818,12 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
         can_leave_stage_after_check(state, world, names.turbo_man_defeated)
     )
 
-    multiworld.get_location(names.proto_shield_loc, player).access_rule = lambda state: (
-        state.has(names.proto_man_cloud_man, player)
-        and state.has(names.proto_man_turbo_man, player)
-        and can_leave_stage_after_check(state, world, names.shade_man_defeated)
+    multiworld.get_location(
+        names.proto_shield_loc,
+        player,
+    ).access_rule = lambda state: can_complete_proto_man_encounter(
+        state,
+        world,
     )
 
     # ============================================================

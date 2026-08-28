@@ -3660,13 +3660,17 @@ AP_CheckWily4Requirement:
     CMP #$02
     BEQ .goto_weapons
 
-    ; Unknown requirement type: deny.
-    PLP
-    CLC
-    RTL
+    ; Remaining valid type is 3 = Defeat Proto Man.
+    ; A is $03 here, so turn it into the Proto Shield check bit ($04).
+    INC A
+    AND.l !AP_PROTO_CHECKS
+    BNE .allow
+
+    BRA .deny
 
 .goto_weapons:
     JMP .check_weapons
+
 
 .check_wily_stages:
     LDA.l AP_ConfigWily4WilyStages

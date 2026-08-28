@@ -2,6 +2,7 @@ from BaseClasses import CollectionState
 
 from .bases import MM7TestBase
 from .. import names
+from ..rules import has_final_wily_stage_access
 
 
 class TestWilyLogic(MM7TestBase):
@@ -121,4 +122,41 @@ class TestWilyLogic(MM7TestBase):
             [names.hannya_ned_defeated],
             self.with_wily_access(names.wily_3_access),
             only_check_listed=True,
+        )
+
+class TestProtoManFinalStageRequirement(MM7TestBase):
+    options = {
+        "wily_4_requirement_type": "defeat_protoman",
+        "logic_boss_weakness": False,
+        "robot_master_access_codes": False,
+    }
+
+    def test_final_wily_stage_requires_proto_man_encounter(self) -> None:
+        state = CollectionState(self.multiworld)
+        world = self.multiworld.worlds[self.player]
+
+        self.assertFalse(
+            has_final_wily_stage_access(state, world),
+        )
+
+        # Receiving the randomized Proto Shield item itself
+        # must not satisfy the requirement.
+        state.collect(self.get_item_by_name(names.proto_shield))
+
+        self.assertFalse(
+            has_final_wily_stage_access(state, world),
+        )
+
+        # One clue is not enough.
+        state.collect(self.get_item_by_name(names.proto_man_cloud_man))
+
+        self.assertFalse(
+            has_final_wily_stage_access(state, world),
+        )
+
+        # Both clues make the Proto Man encounter completable.
+        state.collect(self.get_item_by_name(names.proto_man_turbo_man))
+
+        self.assertTrue(
+            has_final_wily_stage_access(state, world),
         )
