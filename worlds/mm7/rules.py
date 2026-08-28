@@ -44,6 +44,16 @@ ROBOT_MASTER_ACCESS_CODE_TABLE = {
     names.spring_man_defeated: names.spring_man_access,
 }
 
+BOSS_RUSH_LOCATION_TABLE = {
+    names.freeze_man_rematch: names.freeze_man_defeated,
+    names.slash_man_rematch: names.slash_man_defeated,
+    names.junk_man_rematch: names.junk_man_defeated,
+    names.cloud_man_rematch: names.cloud_man_defeated,
+    names.turbo_man_rematch: names.turbo_man_defeated,
+    names.spring_man_rematch: names.spring_man_defeated,
+    names.shade_man_rematch: names.shade_man_defeated,
+    names.burst_man_rematch: names.burst_man_defeated,
+}
 
 WEAKNESS_TABLE = {
     names.burst_man_defeated: [names.freeze_cracker, names.scorch_wheel],
@@ -126,11 +136,52 @@ def has_wily_3_access(state: CollectionState, player: int) -> bool:
     return state.has(names.wily_3_access, player)
 
 
-def has_wily_4_access(state: CollectionState, world: "MegaMan7World") -> bool:
+def has_boss_rush_access(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    return (
+        world.options.wily_4_behavior.value
+        == world.options.wily_4_behavior.option_split
+        and state.has(names.boss_rush_access, world.player)
+    )
+
+
+def can_defeat_boss_rush(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    return all(
+        meets_boss_weakness_logic(
+            state,
+            world,
+            boss,
+        )
+        for boss in BOSS_RUSH_LOCATION_TABLE.values()
+    )
+
+
+def can_clear_boss_rush(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    return (
+        has_boss_rush_access(state, world)
+        and can_defeat_boss_rush(state, world)
+    )
+
+
+def has_final_wily_stage_access(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
     player = world.player
     requirement_type = world.options.wily_4_requirement_type.value
 
-    if requirement_type == world.options.wily_4_requirement_type.option_wily_stages:
+    if (
+        requirement_type
+        == world.options.wily_4_requirement_type.option_wily_stages
+    ):
         required = world.options.wily_4_wily_stages.value
 
         cleared_wily_stages = sum(
@@ -141,27 +192,28 @@ def has_wily_4_access(state: CollectionState, world: "MegaMan7World") -> bool:
             ]
         )
 
+        if can_clear_boss_rush(state, world):
+            cleared_wily_stages += 1
+
         return cleared_wily_stages >= required
 
-    if requirement_type == world.options.wily_4_requirement_type.option_robot_masters:
+    if (
+        requirement_type
+        == world.options.wily_4_requirement_type.option_robot_masters
+    ):
         required = world.options.wily_4_robot_masters.value
 
         defeated_robot_masters = sum(
-            [
-                state.has(names.freeze_man_defeated, player),
-                state.has(names.cloud_man_defeated, player),
-                state.has(names.junk_man_defeated, player),
-                state.has(names.burst_man_defeated, player),
-                state.has(names.slash_man_defeated, player),
-                state.has(names.spring_man_defeated, player),
-                state.has(names.shade_man_defeated, player),
-                state.has(names.turbo_man_defeated, player),
-            ]
+            state.has(boss, player)
+            for boss in MAIN_BOSSES
         )
 
         return defeated_robot_masters >= required
 
-    if requirement_type == world.options.wily_4_requirement_type.option_weapons:
+    if (
+        requirement_type
+        == world.options.wily_4_requirement_type.option_weapons
+    ):
         required = world.options.wily_4_weapons.value
 
         weapons_received = sum(
@@ -213,8 +265,10 @@ def can_farm_shop_bolts(
     state: CollectionState,
     world: "MegaMan7World",
 ) -> bool:
-    # Cloud Man's stage provides a reliable, repeatable bolt farm.
-    return has_robot_master_stage_access(
+    # Cloud Man's stage provides a reliable, repeatable bolt farm,
+    # but farming only works logically if the player can leave the stage
+    # and keep repeating it.
+    return can_leave_stage_after_check(
         state,
         world,
         names.cloud_man_defeated,
@@ -287,6 +341,25 @@ def can_use_exit_unit_after_check(
 
     return world.options.paid_exit_unit.value and world.options.paid_exit_unit_in_logic.value
 
+def can_clear_final_wily_stage(
+    state: CollectionState,
+    world: "MegaMan7World",
+) -> bool:
+    if not has_final_wily_stage_access(state, world):
+        return False
+
+    if (
+        world.options.wily_4_behavior.value
+        == world.options.wily_4_behavior.option_vanilla
+        and not can_defeat_boss_rush(state, world)
+    ):
+        return False
+
+    return meets_boss_weakness_logic(
+        state,
+        world,
+        names.wily_capsule,
+    )
 
 def can_leave_stage_after_check(
     state: CollectionState,
@@ -495,7 +568,6 @@ PICKUPSANITY_WILY_STAGES = {
     ),
 }
 
-
 def meets_pickupsanity_requirement(
     state: CollectionState,
     player: int,
@@ -604,17 +676,18 @@ def can_leave_wily_stage_after_check(
         )
 
     if wily_stage == 4:
-        if not has_wily_4_access(state, world):
+        if (
+            world.options.wily_4_behavior.value
+            == world.options.wily_4_behavior.option_split
+        ):
+            # Split Boss Rush always provides a free Exit Unit.
+            return has_boss_rush_access(state, world)
+
+        if not has_final_wily_stage_access(state, world):
             return False
 
-        can_clear_stage = meets_boss_weakness_logic(
-            state,
-            world,
-            names.wily_capsule,
-        )
-
         return (
-            can_clear_stage
+            can_clear_final_wily_stage(state, world)
             or can_use_exit_unit_after_check(
                 state,
                 world,
@@ -835,11 +908,35 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
     )
 
     # ============================================================
+    # Boss Rush
+    #
+    # Split mode exposes each Robot Master rematch as an AP check.
+    # Entering the Boss Rush requires the Boss Rush Access Code. Each rematch
+    # independently requires that boss's weakness when weakness
+    # logic is enabled.
+    # ============================================================
+
+    if (
+        world.options.wily_4_behavior.value
+        == world.options.wily_4_behavior.option_split
+    ):
+        for rematch_location, boss in BOSS_RUSH_LOCATION_TABLE.items():
+            multiworld.get_location(
+                rematch_location,
+                player,
+            ).access_rule = (
+                lambda state, b=boss:
+                has_boss_rush_access(state, world)
+                and meets_boss_weakness_logic(state, world, b)
+            )
+
+    # ============================================================
     # Wily stages
     #
     # - Wily 1/2/3 are unlocked independently by access-code items.
     # - They can be cleared in any order.
-    # - Wily 4 uses its configured access requirement.
+    # - Boss Rush access is controlled by its Access Code in Split mode.
+    # - Final Wily Stage access uses the configured progression requirement.
     # - Boss weaknesses are required when logic_boss_weakness is enabled.
     # ============================================================
 
@@ -885,9 +982,12 @@ def set_rules(world: World, multiworld: MultiWorld, player: int) -> None:
         and meets_boss_weakness_logic(state, world, names.hannya_ned_defeated)
     )
 
-    multiworld.get_location(names.wily_capsule, player).access_rule = lambda state: (
-        has_wily_4_access(state, world)
-        and meets_boss_weakness_logic(state, world, names.wily_capsule)
+    multiworld.get_location(
+        names.wily_capsule,
+        player,
+    ).access_rule = (
+        lambda state:
+        can_clear_final_wily_stage(state, world)
     )
 
     # ============================================================

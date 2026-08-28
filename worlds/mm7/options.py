@@ -102,11 +102,50 @@ class PaidExitUnitInLogic(Toggle):
     display_name = "Paid Exit Unit in Logic"
     default = False
 
-class Wily4RequirementType(Choice):
+class WilyStageLayout(Choice):
     """
-    Determines what is required before Wily 4 becomes available.
+    Determines how the Boss Rush and Final Wily Stage are structured.
+
+    Vanilla:
+        The Boss Rush, Wily Machine 7, and Wily Capsule remain one
+        continuous stage. The configured Final Wily Stage requirement
+        controls access to this stage.
+
+    Split:
+        The Boss Rush becomes a separate stage unlocked by the
+        Boss Rush Access Code. Completing it returns to stage select.
+
+        The Final Wily Stage contains Wily Machine 7 and Wily Capsule
+        and is unlocked by the configured Final Wily Stage requirement.
+
+        When Wily Stages is selected as the requirement type, completing
+        the Boss Rush counts as one of the four possible Wily stage clears.
+
+    Skip:
+        The Boss Rush is skipped. The Final Wily Stage begins immediately
+        before Wily Machine 7 and is unlocked by the configured
+        Final Wily Stage requirement.
     """
-    display_name = "Wily 4 Requirement Type"
+
+    display_name = "Boss Rush / Final Stage Layout"
+
+    option_vanilla = 0
+    option_split = 1
+    option_skip = 2
+
+    default = option_split
+
+class WilyFinalStageRequirementType(Choice):
+    """
+    Determines what is required to access the Final Wily Stage,
+    containing Wily Machine 7 and Wily Capsule.
+
+    In Split mode, the Boss Rush is a separate stage and does not
+    automatically have to be completed. It can contribute toward
+    the Wily Stages requirement.
+    """
+
+    display_name = "Final Wily Stage Requirement"
 
     option_wily_stages = 0
     option_robot_masters = 1
@@ -114,32 +153,46 @@ class Wily4RequirementType(Choice):
 
     default = option_wily_stages
 
+class WilyFinalStageWilyStages(Range):
+    """
+    With the Wily Stages requirement, sets the number of completed
+    Wily stages required to access the Final Wily Stage.
 
-class Wily4WilyStages(Range):
+    Wily 1, Wily 2, and Wily 3 can each count toward this requirement.
+
+    In Split mode, the Boss Rush is a separate fourth Wily stage
+    and can also count toward this requirement. A value of 4 therefore
+    requires Wily 1, Wily 2, Wily 3, and the Boss Rush to be completed.
+
+    Outside Split mode, the maximum effective value is 3.
+    A configured value of 4 is then automatically reduced to 3.
     """
-    With Wily Stages requirement: set the number of Wily stages required to access Wily 4.
-    """
-    display_name = "Wily Stages Required for Wily 4"
+
+    display_name = "Wily Stages Required for Final Stage"
     range_start = 0
-    range_end = 3
+    range_end = 4
     default = 3
 
 
-class Wily4RobotMasters(Range):
+class WilyFinalStageRobotMasters(Range):
     """
-    With Robot Masters requirement: set the number of defeated Robot Masters required to access Wily 4.
+    With the Robot Masters requirement, sets the number of defeated
+    Robot Masters required to access the Final Wily Stage.
     """
-    display_name = "Robot Masters Required for Wily 4"
+
+    display_name = "Robot Masters Required for Final Stage"
     range_start = 0
     range_end = 8
     default = 8
 
 
-class Wily4Weapons(Range):
+class WilyFinalStageWeapons(Range):
     """
-    With Weapons requirement: set the number of Robot Master weapons required to access Wily 4.
+    With the Weapons requirement, sets the number of Robot Master
+    weapons required to access the Final Wily Stage.
     """
-    display_name = "Weapons Required for Wily 4"
+
+    display_name = "Weapons Required for Final Stage"
     range_start = 0
     range_end = 8
     default = 8
@@ -217,10 +270,11 @@ class MegaMan7Options(PerGameCommonOptions):
     paid_exit_unit_cost: PaidExitUnitCost
     paid_exit_unit_in_logic: PaidExitUnitInLogic
 
-    wily_4_requirement_type: Wily4RequirementType
-    wily_4_wily_stages: Wily4WilyStages
-    wily_4_robot_masters: Wily4RobotMasters
-    wily_4_weapons: Wily4Weapons
+    wily_4_behavior: WilyStageLayout
+    wily_4_requirement_type: WilyFinalStageRequirementType
+    wily_4_wily_stages: WilyFinalStageWilyStages
+    wily_4_robot_masters: WilyFinalStageRobotMasters
+    wily_4_weapons: WilyFinalStageWeapons
 
     starting_lives: StartingLives
     starting_bolts: StartingBolts
@@ -260,12 +314,13 @@ mm7_option_groups = [
         start_collapsed=True,
     ),
     OptionGroup(
-        "Wily 4 Options",
+        "Wily Progression",
         [
-            Wily4RequirementType,
-            Wily4WilyStages,
-            Wily4RobotMasters,
-            Wily4Weapons,
+            WilyStageLayout,
+            WilyFinalStageRequirementType,
+            WilyFinalStageWilyStages,
+            WilyFinalStageRobotMasters,
+            WilyFinalStageWeapons,
         ],
         start_collapsed=True,
     ),

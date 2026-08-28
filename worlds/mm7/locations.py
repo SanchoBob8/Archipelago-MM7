@@ -125,6 +125,18 @@ location_table: Dict[str, MM7LocationData] = {
     names.mega_health_capsule_loc:   MM7LocationData(0x31, SPRING_MAN),
 
     # ========================================================
+    # Boss rush
+    # ========================================================
+    names.freeze_man_rematch: MM7LocationData(0x35, WILY_4),
+    names.slash_man_rematch:  MM7LocationData(0x36, WILY_4),
+    names.junk_man_rematch:   MM7LocationData(0x37, WILY_4),
+    names.cloud_man_rematch:  MM7LocationData(0x38, WILY_4),
+    names.turbo_man_rematch:  MM7LocationData(0x39, WILY_4),
+    names.spring_man_rematch: MM7LocationData(0x3A, WILY_4),
+    names.shade_man_rematch:  MM7LocationData(0x3B, WILY_4),
+    names.burst_man_rematch:  MM7LocationData(0x3C, WILY_4),
+
+    # ========================================================
     # Pickupsanity
     #
     # Codes $40-$87 correspond directly to ROM pickup
@@ -260,6 +272,17 @@ boss_item_locations = [
     names.shade_man_defeated_item,
     names.burst_man_defeated_item,
     names.spring_man_defeated_item,
+]
+
+boss_rush_locations = [
+    names.freeze_man_rematch,
+    names.slash_man_rematch,
+    names.junk_man_rematch,
+    names.cloud_man_rematch,
+    names.turbo_man_rematch,
+    names.spring_man_rematch,
+    names.shade_man_rematch,
+    names.burst_man_rematch,
 ]
 
 proto_man_check_locations = [
@@ -484,6 +507,8 @@ main_boss_locations: Set[str] = {
     names.turbo_man_defeated,
 }
 
+boss_rush_location_set: Set[str] = set(boss_rush_locations)
+
 main_boss_item_locations: Set[str] = {
     names.burst_man_defeated_item,
     names.cloud_man_defeated_item,
@@ -559,6 +584,7 @@ pickupsanity_location_set: Set[str] = set(pickupsanity_locations)
 
 item_name_groups: Dict[str, Set[str]] = {
     "Boss Defeats": main_boss_locations | fortress_boss_event_locations,
+    "Boss Rush": boss_rush_location_set,
     "Boss Items": main_boss_item_locations | fortress_boss_item_locations,
     "Proto Man": proto_man_locations,
     "Rush Plates": rush_plate_locations,

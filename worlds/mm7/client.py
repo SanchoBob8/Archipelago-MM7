@@ -10,7 +10,11 @@ from worlds.AutoSNIClient import SNIClient
 
 from . import names
 from .items import rom_receive_id
-from .locations import location_name_to_id, pickupsanity_locations
+from .locations import (
+    boss_rush_locations,
+    location_name_to_id,
+    pickupsanity_locations,
+)
 
 snes_logger = logging.getLogger("SNES")
 
@@ -33,7 +37,7 @@ ROM_HEADER_SIZE = 0x15
 
 # File offset written by rom.py: 0x18FEC0
 # SNES HiROM bus address read by SNI: $D8FEC0
-MM7_ROM_AUTH_TOKEN = ROM_START + 0xD8FEC0
+MM7_ROM_AUTH_TOKEN = ROM_START + 0x18FEC0
 MM7_ROM_AUTH_TOKEN_SIZE = 32
 MM7_ROM_AUTH_TOKEN_PREFIX = b"MM7AP"
 
@@ -51,6 +55,7 @@ AP_PICKUP_FLAGS = WRAM_START + 0x1FB0
 AP_MEGA_FLAGS = WRAM_START + 0x1FB2
 AP_MISC_FLAGS = WRAM_START + 0x1FB3
 AP_WILY_FLAGS = WRAM_START + 0x1FB4
+AP_BOSS_RUSH_FLAGS = WRAM_START + 0x1FCA
 
 # 9 bytes = 72 Pickupsanity locations.
 AP_PICKUP_CHECKS = WRAM_START + 0x1FC1
@@ -119,6 +124,7 @@ class MM7SNIClient(SNIClient):
         self.previous_lives: Optional[int] = None
         self.previous_player_ready = False
         self.pickupsanity_enabled = False
+        self.boss_rush_checks_enabled = False
 
     async def deathlink_kill_player(self, ctx) -> None:
         from SNIClient import (
@@ -211,6 +217,10 @@ class MM7SNIClient(SNIClient):
         death_link_enabled = bool(slot_data.get("death_link", False))
         self.pickupsanity_enabled = bool(
             slot_data.get("pickupsanity", False)
+        )
+
+        self.boss_rush_checks_enabled = bool(
+            slot_data.get("boss_rush_checks", False)
         )
 
         async_start(
@@ -422,6 +432,52 @@ class MM7SNIClient(SNIClient):
 
             if location_id not in ctx.locations_checked:
                 new_checks.append(location_id)
+
+        # Boss Rush rematch checks.
+        #
+        # $1FCA bit order:
+        #   bit 0 -> Freeze Man
+        #   bit 1 -> Slash Man
+        #   bit 2 -> Junk Man
+        #   bit 3 -> Cloud Man
+        #   bit 4 -> Turbo Man
+        #   bit 5 -> Spring Man
+        #   bit 6 -> Shade Man
+        #   bit 7 -> Burst Man
+        #
+        # boss_rush_locations uses this exact same order.
+        #
+        # The ROM may set these flags outside Split mode as well, so only
+        # report them when the generated slot actually contains the checks.
+        if self.boss_rush_checks_enabled:
+            boss_rush_flags_raw = await snes_read(
+                ctx,
+                AP_BOSS_RUSH_FLAGS,
+                1,
+            )
+
+            if boss_rush_flags_raw is None:
+                return
+
+            boss_rush_flags = boss_rush_flags_raw[0]
+
+            for bit_index, location_name in enumerate(boss_rush_locations):
+                bit_mask = 1 << bit_index
+
+                if not boss_rush_flags & bit_mask:
+                    continue
+
+                location_id = location_name_to_id.get(location_name)
+
+                if location_id is None:
+                    snes_logger.warning(
+                        "MM7 client missing Boss Rush location id for %s",
+                        location_name,
+                    )
+                    continue
+
+                if location_id not in ctx.locations_checked:
+                    new_checks.append(location_id)
 
         # Pickupsanity
         #

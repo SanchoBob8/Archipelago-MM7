@@ -7,7 +7,7 @@ class TestDefaultRomConfig(MM7TestBase):
     def test_default_rom_config(self) -> None:
         config = get_rom_config(self.world)
 
-        self.assertEqual(MM7_ROM_CONFIG_SIZE, 21)
+        self.assertEqual(MM7_ROM_CONFIG_SIZE, 23)
         self.assertEqual(len(config), MM7_ROM_CONFIG_SIZE)
 
         self.assertEqual(
@@ -23,17 +23,19 @@ class TestDefaultRomConfig(MM7TestBase):
                 0x64,   # Paid Exit Unit cost low: 100
                 0x00,   # Paid Exit Unit cost high
                 0,      # Exit Unit in uncleared stages
-                0,      # Wily 4 requirement type: Wily stages
+                0,      # Final Wily Stage requirement type: Wily stages
                 3,      # Wily stages required
-                8,      # Robot Masters required for Wily 4
-                8,      # Weapons required for Wily 4
+                8,      # Robot Masters required for Final Wily Stage
+                8,      # Weapons required for Final Wily Stage
                 0,      # Skip Intro Stage
                 0,      # Skip Robot Museum
                 4,      # Robot Masters required for Robot Museum
                 0,      # Robot Master Access Codes disabled
                 0,      # No starting Robot Master Access Code
-                1,
-                0,
+                1,      # Checkpoint Selection
+                0,      # Checkpoint Selection in uncleared stages
+                1,      # Wily stage layout: Split
+                0,      # Pickupsanity disabled
             ]),
         )
 
@@ -57,7 +59,9 @@ class TestCustomRomConfig(MM7TestBase):
         "robot_museum_robot_masters": 7,
         "robot_master_access_codes": True,
         "checkpoint_selection": True,
-        "checkpoint_selection_in_uncleared_stages": True
+        "checkpoint_selection_in_uncleared_stages": True,
+        "wily_4_behavior": "skip",
+        "pickupsanity": True,
     }
 
     def test_custom_rom_config_order(self) -> None:
@@ -69,7 +73,7 @@ class TestCustomRomConfig(MM7TestBase):
 
         config = get_rom_config(self.world)
 
-        self.assertEqual(MM7_ROM_CONFIG_SIZE, 21)
+        self.assertEqual(MM7_ROM_CONFIG_SIZE, 23)
         self.assertEqual(len(config), MM7_ROM_CONFIG_SIZE)
 
         self.assertEqual(
@@ -85,16 +89,18 @@ class TestCustomRomConfig(MM7TestBase):
                 0x01,   # Paid Exit Unit cost low
                 0x02,   # Paid Exit Unit cost high
                 1,      # Exit Unit in uncleared stages
-                2,      # Wily 4 requirement type: weapons
+                2,      # Final Wily Stage requirement type: weapons
                 2,      # Wily stages required
-                6,      # Robot Masters required for Wily 4
-                5,      # Weapons required for Wily 4
+                6,      # Robot Masters required for Final Wily Stage
+                5,      # Weapons required for Final Wily Stage
                 1,      # Skip Intro Stage
                 1,      # Skip Robot Museum
                 7,      # Robot Masters required for Robot Museum
                 1,      # Robot Master Access Codes enabled
                 0x01,   # Freeze Man starting Access Code
-                1,
-                1
+                1,      # Checkpoint Selection
+                1,      # Checkpoint Selection in uncleared stages
+                2,      # Wily stage layout: Skip
+                1,      # Pickupsanity enabled
             ]),
         )

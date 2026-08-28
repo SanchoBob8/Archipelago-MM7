@@ -82,6 +82,18 @@ turbo_man_defeated_item = "Turbo Man Weapon Get"
 mash_defeated = "Mash Defeated"
 
 # ============================================================
+# Locations — Boss Rush
+# ============================================================
+burst_man_rematch = "Boss Rush - Burst Man"
+cloud_man_rematch = "Boss Rush - Cloud Man"
+junk_man_rematch = "Boss Rush - Junk Man"
+freeze_man_rematch = "Boss Rush - Freeze Man"
+slash_man_rematch = "Boss Rush - Slash Man"
+spring_man_rematch = "Boss Rush - Spring Man"
+shade_man_rematch = "Boss Rush - Shade Man"
+turbo_man_rematch = "Boss Rush - Turbo Man"
+
+# ============================================================
 # Locations — Proto Man
 # ============================================================
 proto_man_cloud_man_loc = "Proto Man's Clue 1 Location"
@@ -122,6 +134,7 @@ mega_health_capsule_loc = "Mega Health Capsule Location"
 wily_1_access = "Wily 1 Access Code"
 wily_2_access = "Wily 2 Access Code"
 wily_3_access = "Wily 3 Access Code"
+boss_rush_access = "Boss Rush Access Code"
 
 # Wily boss event locations
 guts_man_g_defeated = "Guts Man G Defeated"

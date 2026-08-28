@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from . import MegaMan7World
 
 MM7_ROM_CONFIG_OFFSET = 0x18FEA0
-MM7_ROM_CONFIG_SIZE = 21
+MM7_ROM_CONFIG_SIZE = 23
 
 MM7_USA_MD5 = "301d8c4f1b5de2cd10b68686b17b281a"
 MM7_KNOWN_MD5: set[str] = {
@@ -56,6 +56,9 @@ def get_rom_config(world: "MegaMan7World") -> bytes:
     checkpoint_selection = int(world.options.checkpoint_selection.value)
     checkpoint_selection_in_uncleared_stages = int(world.options.checkpoint_selection_in_uncleared_stages.value)
 
+    pickupsanity = int(world.options.pickupsanity.value)
+
+    wily_4_behavior = int(world.options.wily_4_behavior.value)
     wily_4_requirement_type = int(world.options.wily_4_requirement_type.value)
     wily_4_wily_stages = int(world.options.wily_4_wily_stages.value)
     wily_4_robot_masters = int(world.options.wily_4_robot_masters.value)
@@ -97,6 +100,8 @@ def get_rom_config(world: "MegaMan7World") -> bytes:
         starting_robot_master_access_mask,
         checkpoint_selection,
         checkpoint_selection_in_uncleared_stages,
+        wily_4_behavior,
+        pickupsanity,
     ])
 
 class MM7Settings(settings.Group):
